@@ -9,3 +9,5 @@ keywords = ["search", "cli", "web"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+url = "2"
