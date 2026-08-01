@@ -3,12 +3,15 @@ name = "hodis"
 version = "0.0.0"
 edition = "2024"
 description = "Websearch tool for humans and AI"
-license = "MIT"
 repository = "https://github.com/habibium/hodis"
-keywords = ["search", "cli", "web"]
+license = "MIT"
+keywords = ["cli", "search", "web"]
 categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.13", features = ["json", "query"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt"] }
 url = "2"
