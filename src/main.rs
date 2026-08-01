@@ -7,6 +7,8 @@ use reqwest::Client;
 use std::{fs::File, io::BufWriter, time::Duration};
 use url::Url;
 
+const RESULT_FILE: &str = "local/result.json";
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
@@ -15,10 +17,10 @@ async fn main() -> Result<()> {
     };
 
     let results = searxng.search(&client, "12 GBP to USD").await?;
-    let file = File::create("result.json")?;
+    let file = File::create(RESULT_FILE)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &results)?;
-    println!("Results wrote to result.json");
+    println!("Results wrote to {RESULT_FILE}");
 
     Ok(())
 }

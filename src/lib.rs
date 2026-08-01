@@ -26,14 +26,8 @@ pub struct SearchResult {
     pub title: String,
     pub url: Url,
     pub snippet: String,
-    pub image: Option<Image>,
+    pub image: Option<Url>,
     pub source: String,
-}
-
-#[derive(Debug, Serialize, Clone, PartialEq)]
-pub struct Image {
-    pub src: Url,
-    pub alt: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

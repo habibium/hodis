@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{Image, Provider, SearchProvider, SearchResponse, SearchResult};
+use crate::{Provider, SearchProvider, SearchResponse, SearchResult};
 
 pub const SEARXNG_BASE_URL: &str = "http://localhost:8888/";
 
@@ -44,22 +44,12 @@ impl SearchProvider for SearXNGProvider {
         let results: Vec<SearchResult> = response
             .results
             .into_iter()
-            .map(|r| {
-                let image = r
-                    .thumbnail
-                    .and_then(|t| Url::parse(&t).ok())
-                    .map(|url| Image {
-                        src: url,
-                        alt: String::from("Image"),
-                    });
-
-                SearchResult {
-                    title: r.title,
-                    url: r.url,
-                    image,
-                    snippet: r.content,
-                    source: r.engine,
-                }
+            .map(|r| SearchResult {
+                title: r.title,
+                url: r.url,
+                image: r.thumbnail.and_then(|t| Url::parse(&t).ok()),
+                snippet: r.content,
+                source: r.engine,
             })
             .collect();
 
