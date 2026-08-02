@@ -19,6 +19,19 @@ pub struct SearchResponse {
     pub answer: Option<Answer>,
     pub results: Vec<SearchResult>,
     pub provider: Provider,
+    pub diagnostics: Diagnostics,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Default)]
+pub struct Diagnostics {
+    pub unresponsive_engines: Vec<EngineIssue>,
+    pub skipped_results: usize,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct EngineIssue {
+    pub engine: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
