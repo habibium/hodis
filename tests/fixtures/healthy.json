@@ -1,0 +1,145 @@
+{
+  "query": "dns lookup",
+  "results": [
+    {
+      "template": "default.html",
+      "title": "DNS Lookup Tool - DNS Tools - MxToolbox",
+      "content": "ABOUT DNS LOOKUP This test will list DNS records for a domain in priority order. The DNS lookup is done directly against the domain's authoritative name server, so changes to DNS Records should show up instantly. By default, the DNS lookup tool will return an IP address if you give it a name (e.g. www.example.com)",
+      "img_src": "",
+      "iframe_src": "",
+      "audio_src": "",
+      "thumbnail": "",
+      "publishedDate": null,
+      "pubdate": "",
+      "length": null,
+      "views": "",
+      "author": "",
+      "metadata": "",
+      "priority": "",
+      "engines": [
+        "duckduckgo",
+        "google cse"
+      ],
+      "open_group": false,
+      "close_group": false,
+      "positions": [
+        1,
+        1
+      ],
+      "score": 4.0,
+      "category": "general",
+      "url": "https://mxtoolbox.com/DNSLookup.aspx",
+      "engine": "google cse",
+      "parsed_url": [
+        "https",
+        "mxtoolbox.com",
+        "/DNSLookup.aspx",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "template": "default.html",
+      "title": "Dig (DNS lookup) - ToolBox Google Apps",
+      "content": "Google Admin Toolbox Dig. Help. To make a DNS lookup: Enter domain name (trailing dot will be auto-appended). Lookup and enjoy the output.",
+      "img_src": "",
+      "iframe_src": "",
+      "audio_src": "",
+      "thumbnail": "",
+      "publishedDate": null,
+      "pubdate": "",
+      "length": null,
+      "views": "",
+      "author": "",
+      "metadata": "",
+      "priority": "",
+      "engines": [
+        "duckduckgo",
+        "google cse"
+      ],
+      "open_group": false,
+      "close_group": false,
+      "positions": [
+        7,
+        7
+      ],
+      "score": 0.5714285714285714,
+      "category": "general",
+      "url": "https://toolbox.googleapps.com/apps/dig/",
+      "engine": "google cse",
+      "parsed_url": [
+        "https",
+        "toolbox.googleapps.com",
+        "/apps/dig/",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "template": "default.html",
+      "title": "ICANN Lookup",
+      "content": "The ICANN registration data lookup tool gives you the ability to look up the current registration data for domain names and Internet number resources.",
+      "img_src": "",
+      "iframe_src": "",
+      "audio_src": "",
+      "thumbnail": "",
+      "publishedDate": null,
+      "pubdate": "",
+      "length": null,
+      "views": "",
+      "author": "",
+      "metadata": "",
+      "priority": "",
+      "engines": [
+        "duckduckgo",
+        "google cse"
+      ],
+      "open_group": false,
+      "close_group": false,
+      "positions": [
+        11,
+        9
+      ],
+      "score": 0.40404040404040403,
+      "category": "general",
+      "url": "https://lookup.icann.org/",
+      "engine": "google cse",
+      "parsed_url": [
+        "https",
+        "lookup.icann.org",
+        "/",
+        "",
+        "",
+        ""
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Reverse_DNS_lookup",
+      "engine": "duckduckgo",
+      "parsed_url": [
+        "https",
+        "en.wikipedia.org",
+        "/wiki/Reverse_DNS_lookup",
+        "",
+        "",
+        ""
+      ],
+      "template": "answer/legacy.html",
+      "answer": "In computer networks, a reverse DNS lookup or reverse DNS resolution is the querying technique of the Domain Name System to determine the domain name associated with an IP address – the reverse of the usual \"forward\" DNS lookup of an IP address from a domain name. The process of reverse resolving of an IP address uses PTR records. rDNS involves searching domain name registry and registrar tables. The reverse DNS database of the Internet is rooted in the.arpa top-level domain. More at Wikipedia"
+    }
+  ],
+  "unresponsive_engines": [
+    [
+      "brave",
+      "Suspended: too many requests"
+    ],
+    [
+      "startpage",
+      "Suspended: CAPTCHA"
+    ]
+  ]
+}

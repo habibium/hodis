@@ -1,0 +1,93 @@
+{
+  "query": "nature wildlife photography",
+  "results": [
+    {
+      "template": "images.html",
+      "url": "",
+      "thumbnail_src": "",
+      "img_src": "https://photographyreal.com/wp-content/uploads/2024/06/Ultimate-Wildlife-Photography-Tips-For-Stunning-Shots-269616828.jpg",
+      "content": null,
+      "title": "",
+      "source": "",
+      "resolution": "",
+      "img_format": null,
+      "engine": "bing images",
+      "parsed_url": null,
+      "thumbnail": "",
+      "priority": "",
+      "engines": [
+        "bing images"
+      ],
+      "positions": [
+        26,
+        27
+      ],
+      "score": 0.150997150997151,
+      "category": "images",
+      "publishedDate": null
+    },
+    {
+      "template": "images.html",
+      "url": "https://www.earthtouchnews.com/natural-world/natural-world/the-stunning-winners-in-the-wildlife-photographer-of-the-year-peoples-choice-award/",
+      "thumbnail_src": "https://ts2.mm.bing.net/th?id=OIP.oZNrSe0DoSyBpMDWzzi74AHaE7&pid=15.1",
+      "img_src": "https://www.earthtouchnews.com/media/1955323/mark-boyd-wildlife-photographer-of-the-year_2024-02-14.jpg",
+      "content": "The stunning winners in the Wildlife Photographer of the Year People’s ...",
+      "title": "The stunning winners in the Wildlife Photographer of the Year People’s ...",
+      "source": "earthtouchnews.com",
+      "resolution": "1180×786",
+      "img_format": null,
+      "engine": "bing images",
+      "parsed_url": [
+        "https",
+        "www.earthtouchnews.com",
+        "/natural-world/natural-world/the-stunning-winners-in-the-wildlife-photographer-of-the-year-peoples-choice-award/",
+        "",
+        "",
+        ""
+      ],
+      "thumbnail": "",
+      "priority": "",
+      "engines": [
+        "bing images",
+        "duckduckgo images"
+      ],
+      "positions": [
+        3,
+        2
+      ],
+      "score": 1.6666666666666665,
+      "category": "images",
+      "publishedDate": null
+    },
+    {
+      "template": "images.html",
+      "url": "https://cdn.jsdelivr.net/npm/lucide-static/icons/binoculars.svg",
+      "title": "binoculars",
+      "content": "field glasses, lorgnette, pince-nez, observation, sightseeing, nature, wildlife, birdwatching, scouting, surveillance, search, discovery, monitoring, lookout, viewpoint, travel, tourism, research",
+      "img_src": "https://cdn.jsdelivr.net/npm/lucide-static/icons/binoculars.svg",
+      "img_format": "SVG",
+      "engine": "lucide",
+      "parsed_url": [
+        "https",
+        "cdn.jsdelivr.net",
+        "/npm/lucide-static/icons/binoculars.svg",
+        "",
+        "",
+        ""
+      ],
+      "thumbnail": "",
+      "priority": "",
+      "engines": [
+        "lucide"
+      ],
+      "positions": [
+        1
+      ],
+      "score": 1.0,
+      "category": "images",
+      "publishedDate": null
+    }
+  ],
+  "answers": [],
+  "unresponsive_engines": []
+}

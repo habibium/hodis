@@ -1,0 +1,185 @@
+{
+  "query": "null fields",
+  "results": [
+    {
+      "template": "packages.html",
+      "url": "https://hub.docker.com/r/rancher/rke2-runtime",
+      "title": "rancher/rke2-runtime",
+      "content": "",
+      "thumbnail": null,
+      "package_name": "rancher/rke2-runtime",
+      "maintainer": "Rancher by SUSE",
+      "publishedDate": "2026-07-30T18:52:35.880553+00:00",
+      "popularity": "50M+ pulls, 6 stars",
+      "tags": [
+        "amd64",
+        "arm64",
+        "s390x",
+        "unknown"
+      ],
+      "engine": "docker hub",
+      "parsed_url": [
+        "https",
+        "hub.docker.com",
+        "/r/rancher/rke2-runtime",
+        "",
+        "",
+        ""
+      ],
+      "img_src": "",
+      "priority": "",
+      "engines": [
+        "docker hub"
+      ],
+      "positions": [
+        3
+      ],
+      "score": 0.3333333333333333,
+      "category": "it",
+      "pubdate": "2026-07-30 18:52:35+0000"
+    },
+    {
+      "title": null,
+      "img_src": "",
+      "iframe_src": "",
+      "audio_src": "",
+      "thumbnail": "",
+      "publishedDate": "2026-05-10T00:00:00",
+      "pubdate": "2026-05-10 00:00:00",
+      "length": null,
+      "views": "",
+      "author": "",
+      "metadata": "",
+      "priority": "",
+      "engines": [
+        "pubmed"
+      ],
+      "open_group": false,
+      "close_group": false,
+      "positions": [
+        14
+      ],
+      "score": 0.07142857142857142,
+      "category": "science",
+      "template": "paper.html",
+      "content": "CRISPR-based genome and epigenome editing technologies have rapidly evolved from programmable nucleases into a diverse therapeutic toolbox encompassing conventional CRISPR systems, base editing, prime editing, RNA targeting, and epigenetic modulation. While early clinical successes relied on",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/42524609",
+      "engine": "pubmed",
+      "parsed_url": [
+        "https",
+        "www.ncbi.nlm.nih.gov",
+        "/pubmed/42524609",
+        "",
+        "",
+        ""
+      ],
+      "date_of_publication": {
+        "datetime": "2026-05-10T00:00:00"
+      },
+      "comments": "",
+      "tags": [],
+      "type": "",
+      "authors": [
+        "Leonardo Martin",
+        "Jure Bohinc",
+        "Alessandra Recchia",
+        "Stefano Gritti",
+        "Giorgia Santilli",
+        "Joanna Zeyland",
+        "Melita Vidaković",
+        "Nevena Grdović",
+        "Karim Benabdellah",
+        "María Ortiz-Bueno",
+        "Bilge Debelec Butuner",
+        "Luana Pisaniello",
+        "Roberta Stilhano",
+        "Daniela Benati",
+        "Fatma Zehra Hapil",
+        "Shariqa Khawaja",
+        "Rajeevkumar Raveendran Nair",
+        "Carla Giacomelli",
+        "Erden Atilla",
+        "Federica Zinghirino",
+        "Tommaso Ferrari",
+        "Federico Corradi",
+        "Tamas J Laufer",
+        "Denis Khnykin",
+        "Gloria González Aseguinolaza",
+        "Mojca Skrbinek",
+        "Tjaša Mlakar",
+        "Tjaša Lapanja",
+        "Duško Lainšček"
+      ],
+      "editor": "",
+      "publisher": "",
+      "journal": "International journal of biological sciences",
+      "volume": "",
+      "pages": "",
+      "number": "",
+      "doi": "10.7150/ijbs.133162",
+      "issn": [
+        "1449-2288"
+      ],
+      "isbn": [],
+      "pdf_url": "",
+      "html_url": ""
+    },
+    {
+      "template": "default.html",
+      "title": "DNS Lookup Tool - DNS Tools - MxToolbox",
+      "content": "ABOUT DNS LOOKUP This test will list DNS records for a domain in priority order. The DNS lookup is done directly against the domain's authoritative name server, so changes to DNS Records should show up instantly. By default, the DNS lookup tool will return an IP address if you give it a name (e.g. www.example.com)",
+      "img_src": "",
+      "iframe_src": "",
+      "audio_src": "",
+      "thumbnail": "",
+      "publishedDate": null,
+      "pubdate": "",
+      "length": null,
+      "views": "",
+      "author": "",
+      "metadata": "",
+      "priority": "",
+      "engines": [
+        "duckduckgo",
+        "google cse"
+      ],
+      "open_group": false,
+      "close_group": false,
+      "positions": [
+        1,
+        1
+      ],
+      "score": 4.0,
+      "category": "general",
+      "url": "https://mxtoolbox.com/DNSLookup.aspx",
+      "engine": "google cse",
+      "parsed_url": [
+        "https",
+        "mxtoolbox.com",
+        "/DNSLookup.aspx",
+        "",
+        "",
+        ""
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "answer": ""
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Soldering",
+      "engine": "duckduckgo",
+      "parsed_url": [
+        "https",
+        "en.wikipedia.org",
+        "/wiki/Soldering",
+        "",
+        "",
+        ""
+      ],
+      "template": "answer/legacy.html",
+      "answer": "Soldering joins two metal surfaces using a filler metal called solder. The surfaces are heated, melting the solder, which is then allowed to cool and solidify, creating a strong and durable joint. Soldering is commonly used in the electronics industry for the manufacture and repair of printed circuit boards and other electronic components. It is also used in plumbing and metalwork, as well as in the manufacture of jewelry and other decorative items. More at Wikipedia"
+    }
+  ]
+}
