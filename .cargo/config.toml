@@ -1,0 +1,5 @@
+[alias]
+# Regenerate the SearXNG response corpus (see examples/generate-corpus.rs):
+#   cargo corpus                          -> default queries into local/samples
+#   cargo corpus <out-dir> <queries.tsv>  -> custom run
+corpus = "run --example generate-corpus --"
