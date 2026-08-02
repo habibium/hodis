@@ -51,26 +51,25 @@ impl SearXNGProvider {
     pub fn parse_body(&self, query: &str, body: &str) -> Result<SearchResponse> {
         let wire: SearXNGResponse = serde_json::from_str(body)?;
 
-        let mut results = Vec::with_capacity(wire.results.len());
-        let mut skipped = 0;
-        for r in wire.results {
-            // a missing/malformed url or a blank title drops the result and moves on.
-            let Some(Ok(url)) = r.url.as_deref().map(Url::parse) else {
-                skipped += 1;
-                continue;
-            };
-            let Some(title) = r.title.filter(|t| !t.is_empty()) else {
-                skipped += 1;
-                continue;
-            };
-            results.push(SearchResult {
-                title,
-                url,
-                snippet: r.content.unwrap_or_default(),
-                image: r.thumbnail.as_deref().and_then(|t| Url::parse(t).ok()),
-                source: r.engine.unwrap_or_default(),
-            });
-        }
+        let total = wire.results.len();
+        let results: Vec<SearchResult> = wire
+            .results
+            .into_iter()
+            .filter_map(|r| {
+                // items with a missing/malformed url or a blank title gets skipped.
+                let title = r.title.filter(|t| !t.is_empty())?;
+                let url = r.url.as_deref().and_then(|url| Url::parse(url).ok())?;
+                let image = r.thumbnail.as_deref().and_then(|url| Url::parse(url).ok());
+                Some(SearchResult {
+                    title,
+                    url,
+                    image,
+                    snippet: r.content.unwrap_or_default(),
+                    source: r.engine.unwrap_or_default(),
+                })
+            })
+            .collect();
+        let skipped = total - results.len();
 
         let answer = wire
             .answers
