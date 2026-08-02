@@ -76,7 +76,6 @@ impl SearXNGProvider {
             .into_iter()
             .find(|a| !a.answer.is_empty())
             .map(|a| Answer {
-                question: None,
                 url: a.url.as_deref().and_then(|u| Url::parse(u).ok()),
                 content: a.answer,
             });

@@ -45,7 +45,6 @@ pub struct SearchResult {
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct Answer {
-    pub question: Option<String>,
     pub url: Option<Url>,
     pub content: String,
 }
