@@ -1,9 +1,8 @@
 //! Full-corpus certification: parse every recorded response in `local/samples`.
 //!
-//! The corpus is gitignored and regenerable (`cargo corpus`), so this test
-//! adapts at runtime: with a corpus present it certifies the parser against
-//! every recorded body; without one it passes as a no-op after printing a
-//! hint (visible with `cargo test -- --nocapture`).
+//! The corpus is gitignored and regenerable, so this test is ignored by
+//! default. Run it with `cargo test-all` (or `cargo test -- --include-ignored`)
+//! after generating a corpus with `cargo corpus`.
 
 use anyhow::Context;
 use hodis::providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider};
@@ -13,21 +12,20 @@ use url::Url;
 const CORPUS_DIR: &str = "local/samples";
 
 #[test]
+#[ignore = "needs the gitignored local/samples corpus; generate: cargo corpus, run: cargo test-all"]
 fn every_recorded_response_parses() -> anyhow::Result<()> {
-    let Ok(entries) = std::fs::read_dir(CORPUS_DIR) else {
-        eprintln!("corpus sweep skipped: no {CORPUS_DIR} directory — generate one with: cargo corpus");
-        return Ok(());
-    };
+    let entries = std::fs::read_dir(CORPUS_DIR)
+        .with_context(|| format!("no {CORPUS_DIR} directory; generate a corpus with: cargo corpus"))?;
 
     let mut files: Vec<_> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().is_some_and(|x| x == "json"))
         .collect();
     files.sort();
-    if files.is_empty() {
-        eprintln!("corpus sweep skipped: {CORPUS_DIR} is empty — generate a corpus with: cargo corpus");
-        return Ok(());
-    }
+    assert!(
+        !files.is_empty(),
+        "{CORPUS_DIR} is empty; generate a corpus with: cargo corpus"
+    );
 
     let provider = SearXNGProvider {
         base_url: Url::parse(SEARXNG_BASE_URL)?,
