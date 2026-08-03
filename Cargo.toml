@@ -9,6 +9,8 @@ keywords = ["cli", "search", "web"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+anstream = "1"
+anstyle = "1"
 anyhow = "1"
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
