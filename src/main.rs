@@ -1,13 +1,13 @@
+use anstream::AutoStream;
 use anyhow::Result;
 use hodis::{
     SearchProvider,
+    output::render,
     providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
 };
 use reqwest::Client;
-use std::{fs::File, io::BufWriter, time::Duration};
+use std::{io, time::Duration};
 use url::Url;
-
-const RESULT_FILE: &str = "local/result.json";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -16,11 +16,10 @@ async fn main() -> Result<()> {
         base_url: Url::parse(SEARXNG_BASE_URL)?,
     };
 
-    let results = searxng.search(&client, "12 GBP to USD").await?;
-    let file = File::create(RESULT_FILE)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &results)?;
-    println!("Results wrote to {RESULT_FILE}");
+    let response = searxng.search(&client, "12 GBP to USD").await?;
+
+    let mut out = AutoStream::auto(io::stdout().lock());
+    render(&response, &mut out)?;
 
     Ok(())
 }

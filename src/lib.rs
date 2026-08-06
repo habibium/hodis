@@ -1,3 +1,4 @@
+pub mod output;
 pub mod providers;
 
 use anyhow::Result;
