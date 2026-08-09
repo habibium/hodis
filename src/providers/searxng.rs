@@ -1,12 +1,11 @@
+use crate::{
+    Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
-
-use crate::{
-    Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
-};
 
 pub const SEARXNG_BASE_URL: &str = "http://localhost:8888/";
 
