@@ -12,10 +12,11 @@ use url::Url;
 const CORPUS_DIR: &str = "local/samples";
 
 #[test]
-#[ignore = "needs the gitignored local/samples corpus; generate: cargo corpus, run: cargo test-all"]
+#[ignore = "needs the gitignored local/samples corpus; generate: cargo corpus, run: cargo test -- --ignored"]
 fn every_recorded_response_parses() -> anyhow::Result<()> {
-    let entries = std::fs::read_dir(CORPUS_DIR)
-        .with_context(|| format!("no {CORPUS_DIR} directory; generate a corpus with: cargo corpus"))?;
+    let entries = std::fs::read_dir(CORPUS_DIR).with_context(|| {
+        format!("no {CORPUS_DIR} directory; generate a corpus with: cargo corpus")
+    })?;
 
     let mut files: Vec<_> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
