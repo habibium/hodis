@@ -1,7 +1,6 @@
+use crate::{Diagnostics, SearchResponse};
 use anstyle::{AnsiColor, Color, Style};
 use std::io::{self, Write};
-
-use crate::{Diagnostics, SearchResponse};
 
 const ANSWER: Style = Style::new().bold();
 const SOURCE: Style = Style::new().dimmed();
@@ -13,11 +12,9 @@ const URL: Style = Style::new()
     .fg_color(Some(Color::Ansi(AnsiColor::Cyan)))
     .underline();
 
-const DIAG_TITLE: Style = Style::new()
-    .fg_color(Some(Color::Ansi(AnsiColor::Yellow)))
+const WARN: Style = Style::new()
     .bold()
-    .dimmed();
-const DIAG_HEADING: Style = Style::new().bold().dimmed();
+    .fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
 const DIAG_TEXT: Style = Style::new().dimmed();
 
 #[derive(Debug)]
@@ -27,8 +24,6 @@ pub enum OutputFormat {
 }
 
 pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
-    writeln!(out)?;
-
     if let Some(answer) = &response.answer {
         let answer_text = &answer.content;
         writeln!(out, "{ANSWER}{answer_text}{ANSWER:#}")?;
@@ -58,22 +53,38 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
 }
 
 pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io::Result<()> {
+    if diagnostics.skipped_results == 0 && diagnostics.unresponsive_engines.is_empty() {
+        return Ok(());
+    }
+
     writeln!(out)?;
-    writeln!(out, "{DIAG_TITLE}Diagnostics{DIAG_TITLE:#}")?;
-    writeln!(
-        out,
-        "{DIAG_HEADING}Skipped results: {}{DIAG_HEADING:#}",
-        diagnostics.skipped_results
-    )?;
 
     if !diagnostics.unresponsive_engines.is_empty() {
-        writeln!(out, "{DIAG_HEADING}Unresponsive engines:{DIAG_HEADING:#}")?;
+        write!(
+            out,
+            "{WARN}warning:{WARN:#} {DIAG_TEXT}unresponsive engines:{DIAG_TEXT:#}"
+        )?;
+        for (i, engine) in (1..).zip(&diagnostics.unresponsive_engines) {
+            let sep = if i > 1 { "," } else { "" };
+            write!(
+                out,
+                "{DIAG_TEXT}{sep} {} ({}){DIAG_TEXT:#}",
+                engine.engine, engine.reason
+            )?;
+        }
+        writeln!(out)?;
     }
-    for engine in &diagnostics.unresponsive_engines {
+
+    if diagnostics.skipped_results > 0 {
+        let s = if diagnostics.skipped_results > 1 {
+            "s"
+        } else {
+            ""
+        };
         writeln!(
             out,
-            "{DIAG_TEXT}[{}] - {}{DIAG_TEXT:#}",
-            engine.engine, engine.reason
+            "{WARN}warning:{WARN:#} {DIAG_TEXT}skipped {} malformed result{s}{DIAG_TEXT:#}",
+            diagnostics.skipped_results
         )?;
     }
 
