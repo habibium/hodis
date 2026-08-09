@@ -2,7 +2,7 @@ use anstream::AutoStream;
 use anyhow::Result;
 use hodis::{
     SearchProvider,
-    output::render,
+    output::{render, render_diagnostics},
     providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
 };
 use reqwest::Client;
@@ -19,7 +19,9 @@ async fn main() -> Result<()> {
     let response = searxng.search(&client, "12 GBP to USD").await?;
 
     let mut out = AutoStream::auto(io::stdout().lock());
+    let mut err = AutoStream::auto(io::stderr().lock());
     render(&response, &mut out)?;
+    render_diagnostics(&response.diagnostics, &mut err)?;
 
     Ok(())
 }
