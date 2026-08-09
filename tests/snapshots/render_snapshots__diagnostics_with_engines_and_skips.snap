@@ -1,0 +1,7 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+
+warning: unresponsive engines: brave (CAPTCHA), mojeek (timeout)
+warning: skipped 3 malformed results

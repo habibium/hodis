@@ -1,0 +1,6 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+1. Untitled source
+https://example.com/minimal

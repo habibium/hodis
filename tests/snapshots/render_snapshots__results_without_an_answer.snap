@@ -1,0 +1,11 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+1. The Rust Programming Language [duckduckgo]
+https://doc.rust-lang.org/book/
+An introductory book about Rust.
+
+2. Rust Forge [startpage]
+https://forge.rust-lang.org/
+Documentation for the Rust project's infrastructure and processes.
