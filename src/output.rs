@@ -12,7 +12,6 @@ const TITLE: Style = Style::new()
 const URL: Style = Style::new()
     .fg_color(Some(Color::Ansi(AnsiColor::Cyan)))
     .underline();
-const SNIPPET: Style = Style::new();
 
 #[derive(Debug)]
 pub enum OutputFormat {
@@ -27,30 +26,25 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
         let answer_text = &answer.content;
         writeln!(out, "{ANSWER}{answer_text}{ANSWER:#}")?;
         if let Some(url) = &answer.url {
-            let url = url.as_str();
             writeln!(out, "{SOURCE}{url}{SOURCE:#}")?;
         }
         writeln!(out)?;
     }
 
-    for (i, result) in (1..).zip(response.results.iter()) {
-        let (title, url, snippet, source) = (
-            &result.title,
-            &result.url.to_string(),
-            &result.snippet,
-            &result.source,
-        );
-        writeln!(out, "{TITLE}{i}. {title}{TITLE:#}")?;
-        writeln!(out, "{URL}{url}{URL:#}")?;
-        if !snippet.is_empty() {
-            writeln!(out, "{SNIPPET}{snippet}{SNIPPET:#}")?;
-        }
-        if !source.is_empty() {
-            writeln!(out, "{SOURCE}{source}{SOURCE:#}")?;
+    for (i, result) in (1..).zip(&response.results) {
+        if i > 1 {
+            writeln!(out)?;
         }
 
+        write!(out, "{TITLE}{i}. {}{TITLE:#}", result.title)?;
+        if !result.source.is_empty() {
+            write!(out, " {SOURCE}[{}]{SOURCE:#}", result.source)?;
+        }
         writeln!(out)?;
-        writeln!(out)?;
+        writeln!(out, "{URL}{}{URL:#}", result.url)?;
+        if !result.snippet.is_empty() {
+            writeln!(out, "{}", result.snippet)?;
+        }
     }
 
     Ok(())
