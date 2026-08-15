@@ -5,8 +5,9 @@
 //! after generating a corpus with `cargo corpus`.
 
 use anyhow::Context;
-use hodis::providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider};
 use url::Url;
+
+use hodis::providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider};
 
 // Must match the default output directory in examples/generate-corpus.rs.
 const CORPUS_DIR: &str = "local/samples";

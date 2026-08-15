@@ -17,9 +17,10 @@ use std::time::Duration;
 use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use hodis::providers::searxng::SEARXNG_BASE_URL;
 use reqwest::Client;
 use url::Url;
+
+use hodis::providers::searxng::SEARXNG_BASE_URL;
 
 /// Minimum delay between requests. Sustained rates near 1 request/second
 /// get a personal instance's upstream engines suspended within minutes,
@@ -124,7 +125,10 @@ async fn main() -> Result<()> {
                 fs::write(out_dir.join(format!("{number}.json")), &body)?;
                 append_line(&manifest, &format!("{number}\t{category}\t{query}\n"))?;
                 saved += 1;
-                println!("[{n}/{total}] {number}.json <- {category}: {query}", n = i + 1);
+                println!(
+                    "[{n}/{total}] {number}.json <- {category}: {query}",
+                    n = i + 1
+                );
             }
             Err(e) => eprintln!("[{n}/{total}] SKIP {category}: {query} ({e:#})", n = i + 1),
         }
@@ -152,9 +156,12 @@ async fn fetch_validated(
         .text()
         .await?;
 
-    let value: serde_json::Value =
-        serde_json::from_str(&body).context("body is not JSON (anti-bot page? format disabled?)")?;
-    if !value.get("results").is_some_and(serde_json::Value::is_array) {
+    let value: serde_json::Value = serde_json::from_str(&body)
+        .context("body is not JSON (anti-bot page? format disabled?)")?;
+    if !value
+        .get("results")
+        .is_some_and(serde_json::Value::is_array)
+    {
         bail!("JSON body has no `results` array");
     }
     Ok(body)
@@ -185,7 +192,10 @@ fn highest_existing_number(dir: &Path) -> Result<u32> {
 
 fn append_line(path: &Path, line: &str) -> Result<()> {
     use std::io::Write;
-    let mut file = fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     file.write_all(line.as_bytes())?;
     Ok(())
 }

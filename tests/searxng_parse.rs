@@ -1,6 +1,9 @@
-use hodis::Provider;
-use hodis::providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider};
 use url::Url;
+
+use hodis::{
+    Provider,
+    providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
+};
 
 fn provider() -> SearXNGProvider {
     SearXNGProvider {

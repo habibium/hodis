@@ -5,9 +5,12 @@
 //! compared with ANSI escapes stripped; one test guards the escapes themselves.
 
 use anstream::adapter::strip_str;
-use hodis::output::{render, render_diagnostics};
-use hodis::{Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult};
 use url::Url;
+
+use hodis::{
+    Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
+    output::{render, render_diagnostics},
+};
 
 fn parse_url(raw: &str) -> Url {
     Url::parse(raw).expect("test urls are valid")

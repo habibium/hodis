@@ -1,6 +1,8 @@
-use crate::{Diagnostics, SearchResponse};
-use anstyle::{AnsiColor, Color, Style};
 use std::io::{self, Write};
+
+use anstyle::{AnsiColor, Color, Style};
+
+use crate::{Diagnostics, SearchResponse};
 
 const ANSWER: Style = Style::new().bold();
 const SOURCE: Style = Style::new().dimmed();

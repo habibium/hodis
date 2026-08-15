@@ -4,11 +4,12 @@
 //! scripts and agents. These tests freeze field names, casing, and null
 //! representation; a failure here means the public contract changed.
 
+use serde_json::json;
+use url::Url;
+
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
 };
-use serde_json::json;
-use url::Url;
 
 #[test]
 fn search_response_serializes_to_the_frozen_shape() -> anyhow::Result<()> {
