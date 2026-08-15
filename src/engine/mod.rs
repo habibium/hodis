@@ -32,9 +32,8 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::Client;
 use url::Url;
 
-pub use paths::{DATA_DIR_ENV, Paths};
-
 use crate::output::render_setup_step;
+pub use paths::{DATA_DIR_ENV, Paths};
 
 /// uv release hodis provisions with. Pinned, and downloaded into hodis's own
 /// data directory rather than taken from `PATH`, so a bootstrap behaves
