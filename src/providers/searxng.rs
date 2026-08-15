@@ -1,11 +1,15 @@
-use crate::{
-    Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
-};
+use std::num::NonZeroU32;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
+
+use crate::{
+    Answer, Diagnostics, EngineIssue, Provider, SearchParams, SearchProvider, SearchResponse,
+    SearchResult,
+};
 
 pub const SEARXNG_BASE_URL: &str = "http://localhost:8888/";
 
@@ -104,18 +108,29 @@ impl SearXNGProvider {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct SearXNGParams<'a> {
+    q: &'a str,
+    format: &'static str,
+    pageno: Option<NonZeroU32>,
+}
+
 #[async_trait]
 impl SearchProvider for SearXNGProvider {
-    async fn search(&self, client: &Client, query: &str) -> Result<SearchResponse> {
+    async fn search(&self, client: &Client, params: &SearchParams) -> Result<SearchResponse> {
         let body = client
             .get(self.base_url.join("search")?)
-            .query(&[("q", query), ("format", "json")])
+            .query(&SearXNGParams {
+                q: &params.query,
+                pageno: params.page,
+                format: "json",
+            })
             .send()
             .await?
             .error_for_status()?
             .text()
             .await?;
 
-        self.parse_body(query, &body)
+        self.parse_body(&params.query, &body)
     }
 }

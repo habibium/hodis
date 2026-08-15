@@ -4,15 +4,23 @@
 //! its responses, so the request-building and error-mapping behavior of
 //! `search()` is exercised with no real network involved.
 
+use std::num::NonZeroU32;
 use std::time::Duration;
 
-use hodis::SearchProvider;
-use hodis::providers::searxng::SearXNGProvider;
 use url::Url;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use hodis::{SearchParams, SearchProvider, providers::searxng::SearXNGProvider};
+
 const HEALTHY_BODY: &str = include_str!("fixtures/healthy.json");
+
+fn params(q: &str) -> SearchParams {
+    SearchParams {
+        query: q.to_owned(),
+        page: None,
+    }
+}
 
 fn provider_for(server: &MockServer) -> SearXNGProvider {
     SearXNGProvider {
@@ -27,19 +35,45 @@ async fn sends_query_and_format_to_the_search_path() {
         .and(path("/search"))
         .and(query_param("q", "dns lookup"))
         .and(query_param("format", "json"))
+        // A search without an explicit page must leave `pageno` off the wire
+        // entirely, rather than pinning a defaulted one.
+        .and(query_param_is_missing("pageno"))
         .respond_with(ResponseTemplate::new(200).set_body_string(HEALTHY_BODY))
         .expect(1)
         .mount(&server)
         .await;
 
     let response = provider_for(&server)
-        .search(&reqwest::Client::new(), "dns lookup")
+        .search(&reqwest::Client::new(), &params("dns lookup"))
         .await
         .expect("mocked healthy response parses");
 
     assert_eq!(response.results.len(), 3);
     // .expect(1) is verified when `server` drops: the request was really made,
     // exactly once, with the matched path and query params.
+}
+
+#[tokio::test]
+async fn sends_pageno_when_a_page_is_requested() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .and(query_param("q", "dns lookup"))
+        .and(query_param("format", "json"))
+        .and(query_param("pageno", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(HEALTHY_BODY))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let params = SearchParams {
+        query: "dns lookup".to_owned(),
+        page: Some(NonZeroU32::new(2).expect("2 is a valid page number")),
+    };
+    provider_for(&server)
+        .search(&reqwest::Client::new(), &params)
+        .await
+        .expect("mocked healthy response parses");
 }
 
 #[tokio::test]
@@ -58,7 +92,7 @@ async fn respects_a_base_url_with_a_subpath() {
         base_url: Url::parse(&format!("{}/searxng/", server.uri())).expect("valid url"),
     };
     provider
-        .search(&reqwest::Client::new(), "dns lookup")
+        .search(&reqwest::Client::new(), &params("dns lookup"))
         .await
         .expect("subpath-hosted instance works");
 }
@@ -74,7 +108,7 @@ async fn http_403_becomes_an_error() {
         .await;
 
     let err = provider_for(&server)
-        .search(&reqwest::Client::new(), "test")
+        .search(&reqwest::Client::new(), &params("test"))
         .await
         .expect_err("a 403 must not turn into an empty success");
     assert!(
@@ -94,7 +128,7 @@ async fn non_json_success_body_becomes_an_error() {
         .await;
 
     provider_for(&server)
-        .search(&reqwest::Client::new(), "test")
+        .search(&reqwest::Client::new(), &params("test"))
         .await
         .expect_err("HTML with status 200 must fail parsing, not panic");
 }
@@ -120,7 +154,7 @@ async fn a_stalled_server_hits_the_client_timeout() {
     // Message text for timeouts varies across reqwest versions; the contract
     // asserted here is only that a stalled server yields Err, not a hang.
     provider_for(&server)
-        .search(&client, "test")
+        .search(&client, &params("test"))
         .await
         .expect_err("stalled server must time out");
 }

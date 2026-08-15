@@ -1,6 +1,8 @@
 pub mod output;
 pub mod providers;
 
+use std::num::NonZeroU32;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -50,7 +52,13 @@ pub struct Answer {
     pub content: String,
 }
 
+#[derive(Debug)]
+pub struct SearchParams {
+    pub query: String,
+    pub page: Option<NonZeroU32>,
+}
+
 #[async_trait]
 pub trait SearchProvider {
-    async fn search(&self, client: &Client, query: &str) -> Result<SearchResponse>;
+    async fn search(&self, client: &Client, params: &SearchParams) -> Result<SearchResponse>;
 }
