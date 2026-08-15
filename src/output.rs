@@ -19,6 +19,11 @@ const WARN: Style = Style::new()
     .fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
 const DIAG_TEXT: Style = Style::new().dimmed();
 
+const SETUP: Style = Style::new()
+    .bold()
+    .fg_color(Some(Color::Ansi(AnsiColor::Green)));
+const SETUP_TEXT: Style = Style::new().dimmed();
+
 #[derive(Debug)]
 pub enum OutputFormat {
     Text,
@@ -52,6 +57,14 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
     }
 
     Ok(())
+}
+
+/// Narrates one step of the embedded engine's first-run setup.
+pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> {
+    writeln!(
+        out,
+        "{SETUP}setup:{SETUP:#} {SETUP_TEXT}{message}{SETUP_TEXT:#}"
+    )
 }
 
 pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io::Result<()> {
