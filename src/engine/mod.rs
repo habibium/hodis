@@ -68,7 +68,7 @@ const SEARXNG_GIT_BRANCH: &str = "master";
 /// [`SEARXNG_REV`] differently enough that an install made the old way is
 /// wrong. Recorded alongside the revision so those installs are replaced
 /// instead of being run indefinitely.
-const PROVISION_RECIPE: &str = "2";
+const PROVISION_RECIPE: &str = "3";
 
 /// Longest a freshly started instance may take to answer a health probe.
 /// SearXNG parses its engine definitions before it serves, which is seconds on
@@ -217,6 +217,15 @@ impl Engine {
                 .arg(searxng_requirement(&source)?),
             "install SearXNG",
         )?;
+
+        // Windows lacks the `pwd` module SearXNG imports unconditionally, so
+        // the interpreter needs a stand-in before the application can start.
+        // Written after the install because uv owns site-packages until then.
+        if cfg!(windows) {
+            let stub = self.paths.pwd_stub();
+            fs::write(&stub, pwd_stub())
+                .with_context(|| format!("cannot write {}", stub.display()))?;
+        }
 
         // The unpacked source is only needed for the build.
         let _ = fs::remove_dir_all(self.paths.source());
@@ -391,6 +400,29 @@ impl Engine {
     }
 }
 
+/// Contents of the `pwd` stub hodis installs on Windows.
+///
+/// Deliberately a docstring and nothing else: defining a fake `getpwuid` would
+/// mean inventing account data, and if upstream ever grows a second call site
+/// an `AttributeError` naming the missing function is a far better outcome than
+/// SearXNG quietly believing a fabricated user.
+fn pwd_stub() -> String {
+    "\"\"\"Stand-in for the unix-only `pwd` module, written by hodis.
+
+SearXNG's `searx/valkeydb.py` imports `pwd` unconditionally, so on Windows
+`import searx.webapp` fails before the application starts. The module's only
+use of it, `pwd.getpwuid(os.getuid())`, also needs `os.getuid`, which Windows
+does not provide either, and it sits in error logging for a Valkey connection
+that hodis never configures. Satisfying the import is therefore enough.
+
+This module intentionally defines nothing. A missing `getpwuid` raises an
+AttributeError that names the problem, which beats returning invented account
+details from a fake implementation.
+\"\"\"
+"
+    .to_owned()
+}
+
 /// Marker recording what an installed engine was provisioned from.
 ///
 /// It carries the recipe as well as the revision: an install predating a change
@@ -512,7 +544,9 @@ fn run(command: &mut Command, what: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SEARXNG_REV, SEARXNG_VERSION, provision_marker, version_frozen};
+    use std::path::PathBuf;
+
+    use super::{Paths, SEARXNG_REV, SEARXNG_VERSION, provision_marker, pwd_stub, version_frozen};
 
     #[test]
     fn the_frozen_version_defines_every_name_searxng_unpacks() {
@@ -579,6 +613,77 @@ mod tests {
         assert_ne!(
             marker, SEARXNG_REV,
             "a bare revision cannot express a recipe change"
+        );
+    }
+
+    #[test]
+    fn the_pwd_stub_defines_nothing_executable() {
+        // The stub exists only to satisfy an import. Anything that looked like
+        // a getpwuid would be fabricated account data, so the module must stay
+        // a docstring: every line belongs to it.
+        let stub = pwd_stub();
+        assert!(
+            stub.starts_with("\"\"\"") && stub.trim_end().ends_with("\"\"\""),
+            "the stub is one docstring and nothing else:\n{stub}"
+        );
+        // Opening at the first byte, closing at the last, and exactly one pair
+        // of delimiters together leave nowhere for a statement to hide. The
+        // prose is not scanned for keywords: it legitimately discusses
+        // `import` and `getpwuid` while defining neither.
+        assert_eq!(
+            stub.matches("\"\"\"").count(),
+            2,
+            "exactly one docstring opens and closes:\n{stub}"
+        );
+    }
+
+    #[test]
+    fn the_pwd_stub_says_why_it_exists() {
+        // A reader finding this file in site-packages must be able to tell it
+        // apart from a real module without leaving the file.
+        let stub = pwd_stub();
+        for expected in [
+            "hodis",
+            "valkeydb",
+            "getpwuid",
+            "os.getuid",
+            "AttributeError",
+        ] {
+            assert!(
+                stub.contains(expected),
+                "the stub must explain {expected:?}:\n{stub}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_pwd_stub_lands_on_the_windows_import_path() {
+        // Asserted on every platform so the layout stays pinned, even though
+        // only a Windows provision writes the file.
+        let paths = Paths::new(PathBuf::from("/data/hodis"));
+        let stub = paths.pwd_stub();
+
+        assert!(
+            stub.ends_with("pwd.py"),
+            "python imports the module by file name: {}",
+            stub.display()
+        );
+        assert!(
+            stub.starts_with(paths.venv()),
+            "the stub only shadows hodis's own interpreter: {}",
+            stub.display()
+        );
+        let tail: Vec<_> = stub
+            .components()
+            .rev()
+            .take(3)
+            .map(|c| c.as_os_str().to_owned())
+            .collect();
+        assert_eq!(
+            tail,
+            ["pwd.py", "site-packages", "Lib"],
+            "expected the windows virtualenv import path: {}",
+            stub.display()
         );
     }
 

@@ -87,6 +87,23 @@ impl Paths {
         self.venv().join(VENV_BIN).join(PYTHON_EXE)
     }
 
+    /// Import directory of the virtualenv on Windows.
+    ///
+    /// Windows virtualenvs use a fixed `Lib\site-packages`, where unix
+    /// qualifies the path with the interpreter version. Only the Windows
+    /// layout is spelled out because it is the only one hodis writes into.
+    #[must_use]
+    pub fn venv_site_packages(&self) -> PathBuf {
+        self.venv().join("Lib").join("site-packages")
+    }
+
+    /// Stand-in for the unix-only `pwd` module, written on Windows so that
+    /// importing SearXNG succeeds.
+    #[must_use]
+    pub fn pwd_stub(&self) -> PathBuf {
+        self.venv_site_packages().join("pwd.py")
+    }
+
     #[must_use]
     pub fn settings(&self) -> PathBuf {
         self.engine().join("settings.yml")
