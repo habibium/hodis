@@ -1,0 +1,73 @@
+# Proves the embedded-engine bootstrap on machines hodis's end users actually
+# have: no curl, python, pip or uv on PATH. The build step uses the full
+# runner toolchain; the smoke step then strips PATH down to the OS's own
+# binaries, so the only external tools hodis can reach are the ones every
+# stock install ships (notably tar).
+#
+# Manual trigger only: each run downloads a few hundred megabytes and boots a
+# real SearXNG, which is too heavy for per-push CI. Note that upstream search
+# engines often reject datacenter IPs, so the smoke asserts a clean exit and a
+# self-owned toolchain rather than non-empty results.
+name: fresh-machine
+
+on: workflow_dispatch
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Bootstrap and search on a bare PATH (unix)
+        if: runner.os != 'Windows'
+        env:
+          HODIS_DATA_DIR: ${{ runner.temp }}/hodis-data
+        run: |
+          env PATH=/usr/bin:/bin ./target/release/hodis "rust programming language"
+          echo "--- data dir ---"
+          find "$HODIS_DATA_DIR" -maxdepth 3 | head -30
+          test -x "$HODIS_DATA_DIR/bin/uv"
+          test -x "$HODIS_DATA_DIR/engine/venv/bin/python"
+
+      - name: Bootstrap and search on a bare PATH (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          HODIS_DATA_DIR: ${{ runner.temp }}\hodis-data
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & .\target\release\hodis.exe "rust programming language"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "--- data dir ---"
+          Get-ChildItem -Recurse -Depth 2 $env:HODIS_DATA_DIR | Select-Object -First 30
+          if (-not (Test-Path "$env:HODIS_DATA_DIR\bin\uv.exe")) { throw "uv missing" }
+          if (-not (Test-Path "$env:HODIS_DATA_DIR\engine\venv\Scripts\python.exe")) { throw "venv python missing" }
+
+      - name: Second run reuses the running instance (unix)
+        if: runner.os != 'Windows'
+        env:
+          HODIS_DATA_DIR: ${{ runner.temp }}/hodis-data
+        run: |
+          start=$(date +%s)
+          env PATH=/usr/bin:/bin ./target/release/hodis "cargo build"
+          echo "reuse took $(( $(date +%s) - start ))s"
+
+      - name: Second run reuses the running instance (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          HODIS_DATA_DIR: ${{ runner.temp }}\hodis-data
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          & .\target\release\hodis.exe "cargo build"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "reuse took $($sw.Elapsed.TotalSeconds)s"
