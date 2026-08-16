@@ -10,7 +10,10 @@
 # self-owned toolchain rather than non-empty results.
 name: fresh-machine
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/embed-searxng]
 
 jobs:
   smoke:
