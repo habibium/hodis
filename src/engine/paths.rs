@@ -112,6 +112,13 @@ impl Paths {
         self.engine().join("revision")
     }
 
+    /// Scratch directory holding the unpacked SearXNG source during a
+    /// provision. Removed once the install succeeds.
+    #[must_use]
+    pub fn source(&self) -> PathBuf {
+        self.engine().join("source")
+    }
+
     /// Combined stdout and stderr of the running instance.
     #[must_use]
     pub fn log(&self) -> PathBuf {
