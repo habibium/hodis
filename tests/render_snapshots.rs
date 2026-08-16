@@ -1,8 +1,7 @@
 //! Whole-output snapshots of the human-readable text renderer.
 //!
-//! `render_text.rs` pins individual layout policies; these snapshots catch
-//! unintended drift in the output as a whole. ANSI escapes are stripped so the
-//! stored `.snap` files stay readable in review.
+//! `render_text.rs` pins individual policies; these catch drift in the output
+//! as a whole. ANSI escapes are stripped so `.snap` files stay readable.
 
 use anstream::adapter::strip_str;
 use url::Url;

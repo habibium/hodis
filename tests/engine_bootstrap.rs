@@ -1,11 +1,8 @@
 //! End-to-end certification of the embedded engine.
 //!
-//! This provisions a real interpreter and a real SearXNG into a scratch
-//! directory, so it downloads a few hundred megabytes and is ignored by
-//! default. Run it with `cargo test -- --ignored`.
-//!
-//! It deliberately performs no search: reaching a healthy `/healthz` proves the
-//! bootstrap without sending traffic to any upstream engine.
+//! Ignored by default: provisions a real interpreter and SearXNG, downloading
+//! a few hundred megabytes. Asserts only a healthy `/healthz`, so no upstream
+//! engine sees traffic.
 
 use std::time::Duration;
 

@@ -1,8 +1,6 @@
 //! HTTP-layer tests for `SearXNGProvider::search` against a wiremock server.
 //!
-//! Each test binds a fresh mock server on a random localhost port and scripts
-//! its responses, so the request-building and error-mapping behavior of
-//! `search()` is exercised with no real network involved.
+//! Request building and error mapping only, with no real network involved.
 
 use std::num::NonZeroU32;
 use std::time::Duration;

@@ -1,26 +1,11 @@
-//! An embedded SearXNG instance that hodis installs, starts and reuses.
+//! The embedded SearXNG instance hodis installs, starts and reuses.
 //!
-//! A fresh machine has no search backend, and asking people to run Docker or
-//! set up Python is setup hodis can do for them. On the first search that finds
-//! no instance, hodis downloads uv, has it provision a private interpreter and
-//! a SearXNG pinned to [`SEARXNG_REV`], writes a loopback-only configuration
-//! and starts the instance in the background. Every later search finds it
-//! already running and pays nothing.
+//! Lifecycle is re-read from disk each call: running (recorded port answers a
+//! probe), provisioned (interpreter, settings and a matching marker), or
+//! absent. A mismatched marker counts as absent, so upgrading hodis
+//! re-provisions rather than running a stale engine.
 //!
-//! The lifecycle is resolved from what is on disk, never from cached state:
-//!
-//! - *running* — the recorded port answers a health probe, so it is used as is;
-//! - *provisioned* — an interpreter, settings and a matching provision marker
-//!   exist, so the instance only needs starting;
-//! - *absent* — anything else, which triggers a full provision first.
-//!
-//! Treating a mismatched marker as absent is what makes upgrading hodis
-//! re-provision the engine rather than run a stale one.
-//!
-//! Provisioning assumes nothing of the host but a `tar`: it needs no git, no
-//! system Python and no compiler. Everything is fetched from two hosts, the uv
-//! release and the SearXNG source archive, and every Python dependency
-//! installs as a prebuilt wheel.
+//! Provisioning needs only `tar` on the host: no git, no Python, no compiler.
 
 mod daemon;
 mod paths;
@@ -40,52 +25,35 @@ use url::Url;
 use crate::output::render_setup_step;
 pub use paths::{DATA_DIR_ENV, Paths};
 
-/// uv release hodis provisions with. Pinned, and downloaded into hodis's own
-/// data directory rather than taken from `PATH`, so a bootstrap behaves
-/// identically on every machine.
+/// Downloaded into hodis's data directory rather than taken from `PATH`, so a
+/// bootstrap behaves identically on every machine.
 pub const UV_VERSION: &str = "0.11.13";
 
-/// Python version SearXNG is installed into.
 pub const PYTHON_VERSION: &str = "3.13";
 
-/// SearXNG revision the embedded instance is built from.
 pub const SEARXNG_REV: &str = "094c33d406da578ac851f2d8ad10fdfa344a9493";
 
-/// Version of [`SEARXNG_REV`], in the `YYYY.M.D+shorthash` form SearXNG
-/// derives from a commit's date and abbreviated hash. Upstream reads this out
-/// of git; hodis has to state it, so it lives beside the revision and the two
-/// are updated together.
+/// Upstream derives this from git; hodis must state it. Update with
+/// [`SEARXNG_REV`], whose short hash it embeds.
 pub const SEARXNG_VERSION: &str = "2026.8.14+094c33d40";
 
-/// Repository [`SEARXNG_REV`] is taken from, reported by the instance's own
-/// version information.
 const SEARXNG_GIT_URL: &str = "https://github.com/searxng/searxng";
 
-/// Branch [`SEARXNG_REV`] is taken from.
 const SEARXNG_GIT_BRANCH: &str = "master";
 
-/// Generation of the provisioning recipe, bumped whenever hodis builds
-/// [`SEARXNG_REV`] differently enough that an install made the old way is
-/// wrong. Recorded alongside the revision so those installs are replaced
-/// instead of being run indefinitely.
+/// Bumped when hodis builds [`SEARXNG_REV`] differently enough that installs
+/// made the old way are wrong; recorded so they get replaced.
 const PROVISION_RECIPE: &str = "3";
 
-/// Longest a freshly started instance may take to answer a health probe.
-/// SearXNG parses its engine definitions before it serves, which is seconds on
-/// a warm machine and rather more on a cold one.
+/// SearXNG parses its engine definitions before it serves.
 const STARTUP_TIMEOUT: Duration = Duration::from_mins(1);
 
-/// Gap between health probes while waiting for startup.
 const STARTUP_POLL: Duration = Duration::from_millis(250);
 
-/// Ceiling for the uv download, which is tens of megabytes and would otherwise
-/// inherit the short timeout that suits a search request.
+/// Tens of megabytes, so the short timeout suiting a search would not do.
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_mins(10);
 
-/// Reports whether a SearXNG instance is already answering at `base_url`.
-///
-/// Used to decide whether hodis needs its own instance at all. The probe is a
-/// local health endpoint, so it costs an upstream engine nothing.
+/// A local health endpoint, so probing costs an upstream engine nothing.
 pub async fn is_reachable(client: &Client, base_url: &Url) -> bool {
     daemon::is_healthy(client, base_url).await
 }
@@ -102,7 +70,6 @@ impl Engine {
         Ok(Self::new(Paths::resolve()?))
     }
 
-    /// Places the engine at an explicit location.
     #[must_use]
     pub fn new(paths: Paths) -> Self {
         Self { paths }
@@ -114,10 +81,8 @@ impl Engine {
     }
 
     /// Returns the base URL of a healthy instance, installing and starting one
-    /// if needed.
-    ///
-    /// `progress` receives the first-run narration; it belongs on stderr so
-    /// that piped search output stays clean.
+    /// if needed. `progress` belongs on stderr so piped search output stays
+    /// clean.
     pub async fn ensure_running(&self, client: &Client, progress: &mut impl Write) -> Result<Url> {
         if let Some(url) = self.running_url(client).await {
             return Ok(url);
@@ -130,19 +95,17 @@ impl Engine {
         self.start(client, progress).await
     }
 
-    /// Stops the instance, reporting whether one was actually running.
+    /// Reports whether one was actually running.
     pub async fn stop(&self, client: &Client) -> Result<bool> {
         daemon::stop(client, &self.paths).await
     }
 
-    /// URL of an already-running instance, if one answers on the recorded port.
     async fn running_url(&self, client: &Client) -> Option<Url> {
         let port = daemon::read_port(&self.paths)?;
         let url = daemon::base_url(port).ok()?;
         daemon::is_healthy(client, &url).await.then_some(url)
     }
 
-    /// Whether the installed engine matches what this build of hodis expects.
     fn is_provisioned(&self) -> bool {
         self.paths.venv_python().is_file()
             && self.paths.settings().is_file()
@@ -150,8 +113,6 @@ impl Engine {
                 .is_ok_and(|marker| marker.trim() == provision_marker())
     }
 
-    /// Installs uv, a private Python and SearXNG, then writes the instance
-    /// configuration.
     async fn provision(&self, client: &Client, progress: &mut impl Write) -> Result<()> {
         render_setup_step(
             "setting up the local search engine; this happens once and downloads a few hundred megabytes",
@@ -181,10 +142,8 @@ impl Engine {
         render_setup_step("installing SearXNG", progress)?;
         let source = self.fetch_searxng_source(client).await?;
 
-        // Pass one: every runtime requirement, as a prebuilt wheel. Refusing
-        // source distributions here is deliberate — an end-user machine has no
-        // compiler, so a dependency that would need building must fail loudly
-        // rather than emit pages of compiler errors.
+        // Wheels only: an end-user machine has no compiler, so a dependency
+        // needing a build must fail loudly rather than emit compiler errors.
         run(
             self.uv()
                 .arg("pip")
@@ -195,17 +154,16 @@ impl Engine {
                 .arg(":all:")
                 .arg("-r")
                 .arg(source.join("requirements.txt"))
-                // SearXNG builds with setuptools, which pass two runs from
-                // this environment rather than an isolated one.
+                // The build below runs from this environment, not an isolated
+                // one, so its backend must be installed here.
                 .arg("setuptools")
                 .arg("wheel"),
             "install SearXNG's dependencies",
         )?;
 
-        // Pass two: SearXNG itself. Its `setup.py` imports the `searx` package,
-        // which pulls in msgspec and pyyaml, yet declares neither as a build
-        // requirement. Building against the environment just populated
-        // satisfies those imports; an isolated build cannot.
+        // SearXNG's setup.py imports the searx package, pulling in msgspec and
+        // pyyaml without declaring either as a build requirement; only an
+        // unisolated build against the environment above satisfies them.
         run(
             self.uv()
                 .arg("pip")
@@ -218,25 +176,22 @@ impl Engine {
             "install SearXNG",
         )?;
 
-        // Windows lacks the `pwd` module SearXNG imports unconditionally, so
-        // the interpreter needs a stand-in before the application can start.
-        // Written after the install because uv owns site-packages until then.
+        // SearXNG imports the unix-only `pwd` unconditionally. Written after
+        // the install because uv owns site-packages until then.
         if cfg!(windows) {
             let stub = self.paths.pwd_stub();
             fs::write(&stub, pwd_stub())
                 .with_context(|| format!("cannot write {}", stub.display()))?;
         }
 
-        // The unpacked source is only needed for the build.
         let _ = fs::remove_dir_all(self.paths.source());
 
         self.write_settings()?;
         fs::write(self.paths.revision(), provision_marker())
             .with_context(|| format!("cannot write {}", self.paths.revision().display()))?;
 
-        // The download cache is only worth what a re-provision would save, and
-        // it is comparable in size to the installation itself. Reclaiming it is
-        // best-effort: a full engine that kept its cache is not a failure.
+        // The cache rivals the installation in size and only pays off on a
+        // re-provision. Best-effort: keeping it is not a failure.
         let _ = self
             .uv()
             .args(["cache", "clean"])
@@ -246,18 +201,14 @@ impl Engine {
         Ok(())
     }
 
-    /// Unpacks the pinned SearXNG source and freezes its version, returning the
+    /// Unpacks the pinned source and freezes its version, returning the
     /// directory to install from.
     ///
-    /// SearXNG is installed from a local tree rather than from the archive URL
-    /// because its `setup.py` reads the version out of git: `searx/version.py`
-    /// imports `searx.version_frozen` and, when that import fails, shells out
-    /// to `git show`. Release archives do not carry `version_frozen.py` — it is
-    /// generated at release time — so on a machine without git the build dies
-    /// with `FileNotFoundError: 'git'`. Writing the module before building is
-    /// what upstream's own container image does, and it is only possible with
-    /// the source unpacked first. Installing from a URL would reintroduce the
-    /// git requirement.
+    /// A local tree, not the archive URL: `searx/version.py` falls back to
+    /// `git show` when `searx.version_frozen` is missing, and archives omit
+    /// that module, so a git-less machine dies with `FileNotFoundError: 'git'`.
+    /// Writing it first, as upstream's container image does, needs the source
+    /// unpacked; a URL requirement would bring the git dependency back.
     async fn fetch_searxng_source(&self, client: &Client) -> Result<PathBuf> {
         let scratch = self.paths.source();
         // An interrupted provision would otherwise leave a half-unpacked tree.
@@ -284,8 +235,7 @@ impl Engine {
         extract(&archive, &scratch)?;
         let _ = fs::remove_file(&archive);
 
-        // The archive wraps everything in a directory named after the
-        // revision, so the tree is found by what it contains.
+        // The archive wraps the tree in a directory named after the revision.
         let tree = find_shallow(&scratch, OsStr::new("setup.py"))
             .and_then(|setup| setup.parent().map(Path::to_path_buf))
             .context("the SearXNG archive contained no setup.py")?;
@@ -297,7 +247,6 @@ impl Engine {
         Ok(tree)
     }
 
-    /// Downloads the pinned uv release unless hodis already owns a copy.
     async fn ensure_uv(&self, client: &Client, progress: &mut impl Write) -> Result<()> {
         if self.paths.uv().is_file() {
             return Ok(());
@@ -321,7 +270,7 @@ impl Engine {
 
         let bin = self.paths.root().join("bin");
         let unpacked = bin.join("unpacked");
-        // A previous interrupted attempt would otherwise leave its debris here.
+        // An interrupted attempt would otherwise leave its debris here.
         let _ = fs::remove_dir_all(&unpacked);
         fs::create_dir_all(&unpacked)
             .with_context(|| format!("cannot create {}", unpacked.display()))?;
@@ -345,8 +294,6 @@ impl Engine {
         Ok(())
     }
 
-    /// Picks a port, generates a secret and writes both the settings file and
-    /// the port record that later runs read back.
     fn write_settings(&self) -> Result<()> {
         let port = settings::choose_port(daemon::read_port(&self.paths))?;
         let secret = settings::secret_key()?;
@@ -359,7 +306,6 @@ impl Engine {
         Ok(())
     }
 
-    /// Starts the instance and waits for it to answer.
     async fn start(&self, client: &Client, progress: &mut impl Write) -> Result<Url> {
         let port = daemon::read_port(&self.paths)
             .context("the local search engine has no recorded port")?;
@@ -383,15 +329,14 @@ impl Engine {
         )
     }
 
-    /// A uv invocation confined to hodis's own cache and interpreter directory,
-    /// so it neither reads nor disturbs a uv the user may have configured.
+    /// Confined to hodis's own cache and interpreter directory, so it neither
+    /// reads nor disturbs a uv the user may have configured.
     fn uv(&self) -> Command {
         let mut command = Command::new(self.paths.uv());
         command
             .env("UV_CACHE_DIR", self.paths.uv_cache())
             .env("UV_PYTHON_INSTALL_DIR", self.paths.python_install_dir())
-            // Never fall back to a system interpreter: the pinned one is the
-            // only version this revision of SearXNG is known to run on.
+            // A system interpreter is untested against this SearXNG revision.
             .env("UV_MANAGED_PYTHON", "1")
             // Ignore any uv.toml or pyproject.toml near the working directory.
             .env("UV_NO_CONFIG", "1")
@@ -400,44 +345,33 @@ impl Engine {
     }
 }
 
-/// Contents of the `pwd` stub hodis installs on Windows.
-///
-/// Deliberately a docstring and nothing else: defining a fake `getpwuid` would
-/// mean inventing account data, and if upstream ever grows a second call site
-/// an `AttributeError` naming the missing function is a far better outcome than
-/// SearXNG quietly believing a fabricated user.
+/// Empty by design: a fake `getpwuid` would invent account data, whereas an
+/// `AttributeError` names the problem if upstream adds a second call site.
 fn pwd_stub() -> String {
     "\"\"\"Stand-in for the unix-only `pwd` module, written by hodis.
 
 SearXNG's `searx/valkeydb.py` imports `pwd` unconditionally, so on Windows
-`import searx.webapp` fails before the application starts. The module's only
-use of it, `pwd.getpwuid(os.getuid())`, also needs `os.getuid`, which Windows
-does not provide either, and it sits in error logging for a Valkey connection
-that hodis never configures. Satisfying the import is therefore enough.
+`import searx.webapp` fails before the application starts. Its only use,
+`pwd.getpwuid(os.getuid())`, also needs `os.getuid`, absent on Windows too, and
+sits in error logging for a Valkey connection hodis never configures, so
+satisfying the import is enough.
 
-This module intentionally defines nothing. A missing `getpwuid` raises an
-AttributeError that names the problem, which beats returning invented account
-details from a fake implementation.
+This module intentionally defines nothing: a missing `getpwuid` raises an
+AttributeError naming the problem, which beats invented account details.
 \"\"\"
 "
     .to_owned()
 }
 
-/// Marker recording what an installed engine was provisioned from.
-///
-/// It carries the recipe as well as the revision: an install predating a change
-/// in how hodis builds that revision is just as stale as one built from a
-/// different revision, and a marker holding only the revision could not tell.
+/// Carries the recipe as well as the revision: an install predating a change in
+/// how hodis builds that revision is stale, and a bare revision cannot say so.
 fn provision_marker() -> String {
     format!("{SEARXNG_REV} {PROVISION_RECIPE}")
 }
 
-/// PEP 508 requirement pointing at the unpacked source tree.
-///
 /// Naming the package is what makes `--no-build-isolation-package searxng`
-/// apply: handed a bare directory, uv cannot know which package it holds until
-/// the build it is meant to configure has already run, and the build then fails
-/// on SearXNG's undeclared imports.
+/// apply: given a bare directory, uv cannot identify the package until the
+/// build it is meant to configure has already run.
 fn searxng_requirement(source: &Path) -> Result<String> {
     let absolute = std::path::absolute(source)
         .with_context(|| format!("cannot resolve {}", source.display()))?;
@@ -446,13 +380,9 @@ fn searxng_requirement(source: &Path) -> Result<String> {
     Ok(format!("searxng @ {url}"))
 }
 
-/// Contents of `searx/version_frozen.py` for the pinned revision.
-///
-/// This is what `searx/version.py` writes when asked to freeze, and importing
-/// it is the one path through that module which never invokes git. The values
-/// mirror upstream's derivation: the tag and version string are the commit's
-/// date and short hash, and the Docker tag is the same with `+` swapped for a
-/// character a tag may contain.
+/// What `searx/version.py` writes when asked to freeze; importing it is the one
+/// path through that module which never invokes git. The Docker tag swaps `+`
+/// for `-` because a container tag cannot hold a plus.
 fn version_frozen() -> String {
     let docker_tag = SEARXNG_VERSION.replace('+', "-");
     format!(
@@ -469,7 +399,6 @@ GIT_BRANCH = \"{SEARXNG_GIT_BRANCH}\"
     )
 }
 
-/// uv release asset for the host platform.
 fn uv_asset() -> Result<&'static str> {
     let linux_libc = if cfg!(target_env = "musl") {
         "musl"
@@ -491,11 +420,8 @@ fn uv_asset() -> Result<&'static str> {
     Ok(asset)
 }
 
-/// Unpacks a downloaded archive.
-///
-/// Every platform hodis targets ships a `tar`: GNU tar on Linux, bsdtar on
-/// macOS and on Windows 10 and later, where it also reads the zip release.
-/// Using it keeps archive and compression crates out of the dependency tree.
+/// Every target ships a `tar` — bsdtar on macOS and Windows 10 or later, where
+/// it also reads zip — so this keeps archive crates out of the tree.
 fn extract(archive: &Path, into: &Path) -> Result<()> {
     let status = Command::new("tar")
         .arg("-xf")
@@ -513,11 +439,9 @@ fn extract(archive: &Path, into: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Finds `name` in `dir` or in one of its immediate subdirectories.
-///
-/// uv's tar releases wrap their payload in a directory and its zip releases do
-/// not, and the SearXNG archive wraps its tree in a directory named after the
-/// revision, so files are looked for rather than assumed to be at a fixed path.
+/// Finds `name` in `dir` or one level below. uv's tar releases nest their
+/// payload in a directory and its zip releases do not, so the depth is searched
+/// rather than assumed.
 fn find_shallow(dir: &Path, name: &OsStr) -> Option<PathBuf> {
     let direct = dir.join(name);
     if direct.is_file() {
@@ -533,7 +457,7 @@ fn find_shallow(dir: &Path, name: &OsStr) -> Option<PathBuf> {
         })
 }
 
-/// Runs a provisioning command, letting its own progress reach the terminal.
+/// Inherits stdout and stderr so uv's own progress reaches the terminal.
 fn run(command: &mut Command, what: &str) -> Result<()> {
     let status = command
         .status()
@@ -550,9 +474,8 @@ mod tests {
 
     #[test]
     fn the_frozen_version_defines_every_name_searxng_unpacks() {
-        // `searx/version.py` reads exactly these five names off the module and
-        // only falls back to running git when the import fails. A missing name
-        // is an AttributeError at build time, not a graceful degradation.
+        // A name `searx/version.py` expects but does not find is an
+        // AttributeError at build time, not a graceful degradation.
         let frozen = version_frozen();
         for name in [
             "VERSION_STRING",
@@ -585,9 +508,8 @@ mod tests {
 
     #[test]
     fn the_pinned_version_names_the_pinned_revision() {
-        // Guards the maintenance hazard of moving SEARXNG_REV without
-        // SEARXNG_VERSION: the instance would then report a version belonging
-        // to a different commit.
+        // Moving SEARXNG_REV without SEARXNG_VERSION would make the instance
+        // report a version belonging to a different commit.
         let (date, short_hash) = SEARXNG_VERSION
             .split_once('+')
             .expect("the version is date+shorthash");
@@ -603,8 +525,7 @@ mod tests {
 
     #[test]
     fn the_provision_marker_distinguishes_recipes_from_revisions() {
-        // An install made before the recipe changed must not pass for current,
-        // so the marker cannot be the bare revision.
+        // An install made before the recipe changed must not pass for current.
         let marker = provision_marker();
         assert!(
             marker.starts_with(SEARXNG_REV),
@@ -618,18 +539,14 @@ mod tests {
 
     #[test]
     fn the_pwd_stub_defines_nothing_executable() {
-        // The stub exists only to satisfy an import. Anything that looked like
-        // a getpwuid would be fabricated account data, so the module must stay
-        // a docstring: every line belongs to it.
         let stub = pwd_stub();
         assert!(
             stub.starts_with("\"\"\"") && stub.trim_end().ends_with("\"\"\""),
             "the stub is one docstring and nothing else:\n{stub}"
         );
-        // Opening at the first byte, closing at the last, and exactly one pair
-        // of delimiters together leave nowhere for a statement to hide. The
-        // prose is not scanned for keywords: it legitimately discusses
-        // `import` and `getpwuid` while defining neither.
+        // Delimiters at the first and last byte, and exactly one pair, leave
+        // nowhere for a statement to hide. Keywords are not scanned for: the
+        // prose discusses `import` and `getpwuid` while defining neither.
         assert_eq!(
             stub.matches("\"\"\"").count(),
             2,
@@ -639,8 +556,8 @@ mod tests {
 
     #[test]
     fn the_pwd_stub_says_why_it_exists() {
-        // A reader finding this file in site-packages must be able to tell it
-        // apart from a real module without leaving the file.
+        // A reader finding this in site-packages must be able to tell it from a
+        // real module without leaving the file.
         let stub = pwd_stub();
         for expected in [
             "hodis",
@@ -658,8 +575,7 @@ mod tests {
 
     #[test]
     fn the_pwd_stub_lands_on_the_windows_import_path() {
-        // Asserted on every platform so the layout stays pinned, even though
-        // only a Windows provision writes the file.
+        // Asserted everywhere though only a Windows provision writes the file.
         let paths = Paths::new(PathBuf::from("/data/hodis"));
         let stub = paths.pwd_stub();
 

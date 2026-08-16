@@ -5,10 +5,8 @@ use std::net::TcpListener;
 
 use anyhow::{Context, Result};
 
-/// Generates a hex-encoded 256-bit key for `server.secret_key`.
-///
-/// SearXNG signs its own request tokens with this key. Being hex, it never
-/// needs YAML escaping.
+/// Hex-encoded 256-bit key for `server.secret_key`; being hex it never needs
+/// YAML escaping.
 pub fn secret_key() -> Result<String> {
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes).context("no operating system entropy for the instance secret")?;
@@ -20,8 +18,6 @@ pub fn secret_key() -> Result<String> {
     Ok(key)
 }
 
-/// Asks the operating system for an unused loopback port.
-///
 /// The port is recorded and reused for the life of the install, so the gap
 /// between this probe and the instance binding is a first-run concern only.
 pub fn free_port() -> Result<u16> {
@@ -34,11 +30,8 @@ pub fn free_port() -> Result<u16> {
     Ok(port)
 }
 
-/// Keeps `preferred` when it is still bindable, otherwise picks a fresh port.
-///
-/// Holding the port steady across re-provisions means an instance left over
-/// from a previous install collides visibly on startup instead of being
-/// silently orphaned on a port nothing reads any more.
+/// Holding the port steady across re-provisions makes a leftover instance
+/// collide visibly instead of being orphaned on a port nothing reads.
 pub fn choose_port(preferred: Option<u16>) -> Result<u16> {
     if let Some(port) = preferred
         && TcpListener::bind(("127.0.0.1", port)).is_ok()
@@ -48,12 +41,9 @@ pub fn choose_port(preferred: Option<u16>) -> Result<u16> {
     free_port()
 }
 
-/// Renders the settings file for an instance listening on `port`.
-///
-/// `use_default_settings` inherits upstream's engine list and defaults, so only
-/// the deltas that make the instance private, loopback-only and JSON-capable
-/// are spelled out here. Under `use_default_settings`, a list given for a key
-/// replaces the default list, so `formats` is exactly these two.
+/// Only the deltas from upstream's defaults. A list given under
+/// `use_default_settings` replaces rather than extends the default, so
+/// `formats` is exactly these two — and without `json` SearXNG answers 403.
 #[must_use]
 pub fn render(secret_key: &str, port: u16) -> String {
     format!(
@@ -69,8 +59,7 @@ server:
   bind_address: \"127.0.0.1\"
   port: {port}
   secret_key: \"{secret_key}\"
-  # The rate limiter defends public instances and only gets in the way of a
-  # single-user loopback one.
+  # The limiter defends public instances; this one is single-user loopback.
   limiter: false
   public_instance: false
 
@@ -90,8 +79,7 @@ mod tests {
 
     #[test]
     fn settings_enable_the_json_format_hodis_queries() {
-        // Without `json` in the formats list SearXNG answers a search with 403,
-        // so this line is the difference between working and not.
+        // Without `json` in formats, SearXNG answers a search with 403.
         let settings = render("abc123", 8899);
         assert!(
             settings.contains("formats:\n    - html\n    - json\n"),

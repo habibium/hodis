@@ -31,9 +31,8 @@ async fn main() -> Result<()> {
     let mut out = AutoStream::auto(io::stdout().lock());
     let mut err = AutoStream::auto(io::stderr().lock());
 
-    // The default instance is a local one the user may or may not be running.
-    // When nothing answers there, hodis falls back to the SearXNG it installs
-    // and manages itself, so a fresh machine needs no setup.
+    // The default instance is one the user may or may not be running; when
+    // nothing answers there, fall back to the engine hodis manages itself.
     let default_url = Url::parse(SEARXNG_BASE_URL)?;
     let base_url = if is_reachable(&client, &default_url).await {
         default_url

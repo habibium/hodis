@@ -59,7 +59,6 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
     Ok(())
 }
 
-/// Narrates one step of the embedded engine's first-run setup.
 pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> {
     writeln!(
         out,

@@ -1,8 +1,7 @@
 //! Data-directory layout of the embedded engine.
 //!
-//! These pin the file locations that outlive a single run — the port record and
-//! the pid file are what a later invocation reads to find an instance it did
-//! not start, so moving them silently orphans a running engine.
+//! Pins the locations that outlive a run: a later invocation finds an instance
+//! it did not start through the port and pid files, so moving them orphans it.
 
 use std::path::{Path, PathBuf};
 

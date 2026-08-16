@@ -1,11 +1,8 @@
 //! Supervision of the embedded SearXNG process.
 //!
-//! The instance outlives the hodis invocation that started it, so later
-//! searches pay no startup cost. What survives between invocations is the port
-//! file and the pid file; liveness is decided by asking the instance itself
-//! over HTTP rather than by inspecting the process table, which keeps the
-//! check portable and, more importantly, makes "healthy" mean "actually able to
-//! serve a search".
+//! The instance outlives the invocation that started it; only the port and pid
+//! files survive between runs. Liveness is decided over HTTP rather than from
+//! the process table, so "healthy" means able to serve, not merely alive.
 
 use std::fs;
 use std::process::{Command, Stdio};
@@ -17,19 +14,15 @@ use url::Url;
 
 use super::paths::Paths;
 
-/// How long a health probe may take. The endpoint is served from memory, so a
-/// slow answer means a busy or wedged instance either way.
+/// The endpoint is served from memory, so a slow answer means a busy or wedged
+/// instance either way.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Loopback URL of an instance listening on `port`.
 pub fn base_url(port: u16) -> Result<Url> {
     Url::parse(&format!("http://127.0.0.1:{port}/")).context("loopback url is malformed")
 }
 
-/// Reports whether a SearXNG instance is answering at `base_url`.
-///
-/// `/healthz` is served locally and never reaches an upstream engine, so it is
-/// safe to poll as often as needed.
+/// `/healthz` never reaches an upstream engine, so polling it is free.
 pub async fn is_healthy(client: &Client, base_url: &Url) -> bool {
     let Ok(url) = base_url.join("healthz") else {
         return false;
@@ -38,7 +31,6 @@ pub async fn is_healthy(client: &Client, base_url: &Url) -> bool {
     matches!(response, Ok(r) if r.status().is_success())
 }
 
-/// Reads the port recorded when the instance was provisioned.
 pub fn read_port(paths: &Paths) -> Option<u16> {
     fs::read_to_string(paths.portfile())
         .ok()?
@@ -47,7 +39,6 @@ pub fn read_port(paths: &Paths) -> Option<u16> {
         .ok()
 }
 
-/// Reads the process id of the instance hodis last started.
 pub fn read_pid(paths: &Paths) -> Option<u32> {
     fs::read_to_string(paths.pidfile())
         .ok()?
@@ -56,7 +47,6 @@ pub fn read_pid(paths: &Paths) -> Option<u32> {
         .ok()
 }
 
-/// Starts `python -m searx.webapp` in the background and records its pid.
 pub fn spawn(paths: &Paths) -> Result<u32> {
     let log_path = paths.log();
     let log = fs::File::create(&log_path)
@@ -74,8 +64,7 @@ pub fn spawn(paths: &Paths) -> Result<u32> {
         .stderr(Stdio::from(log));
     detach(&mut command);
 
-    // The child is deliberately not awaited: hodis exits while the instance
-    // keeps running, and the operating system reparents it.
+    // Deliberately not awaited: hodis exits, the OS reparents the instance.
     let child = command
         .spawn()
         .with_context(|| format!("cannot start {}", paths.venv_python().display()))?;
@@ -86,11 +75,9 @@ pub fn spawn(paths: &Paths) -> Result<u32> {
     Ok(pid)
 }
 
-/// Terminates a recorded instance and clears its pid file.
-///
-/// Signalling only happens once the recorded port is confirmed to be serving
-/// SearXNG, so a stale pid file whose number has since been recycled by an
-/// unrelated process cannot make hodis kill a stranger.
+/// Signals only after the recorded port is confirmed to be serving SearXNG, so
+/// a stale pid whose number has been recycled cannot make hodis kill a
+/// stranger.
 pub async fn stop(client: &Client, paths: &Paths) -> Result<bool> {
     let Some(pid) = read_pid(paths) else {
         return Ok(false);
@@ -117,8 +104,8 @@ pub async fn stop(client: &Client, paths: &Paths) -> Result<bool> {
     Ok(true)
 }
 
-/// Detaches the instance from hodis's terminal so it survives the CLI exiting
-/// and ignores terminal signals such as Ctrl-C.
+/// Detaches from hodis's terminal so the instance survives the CLI exiting and
+/// ignores terminal signals such as Ctrl-C.
 #[cfg(unix)]
 fn detach(command: &mut Command) {
     use std::os::unix::process::CommandExt as _;
@@ -136,9 +123,8 @@ fn detach(command: &mut Command) {
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
 }
 
-/// Signalling is delegated to the platform's standard tool rather than to a
-/// libc or Win32 binding, so process control costs no extra dependency and no
-/// unsafe code.
+/// The platform's own tool rather than a libc or Win32 binding, which costs no
+/// extra dependency and no unsafe code.
 #[cfg(unix)]
 fn terminate_command(pid: u32) -> Command {
     let mut command = Command::new("kill");
