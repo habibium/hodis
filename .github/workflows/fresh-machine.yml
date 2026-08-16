@@ -54,6 +54,15 @@ jobs:
           if (-not (Test-Path "$env:HODIS_DATA_DIR\bin\uv.exe")) { throw "uv missing" }
           if (-not (Test-Path "$env:HODIS_DATA_DIR\engine\venv\Scripts\python.exe")) { throw "venv python missing" }
 
+      - name: Engine log on failure (unix)
+        if: failure() && runner.os != 'Windows'
+        run: cat "${{ runner.temp }}/hodis-data/engine/searxng.log" || true
+
+      - name: Engine log on failure (windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: Get-Content "$env:RUNNER_TEMP\hodis-data\engine\searxng.log" -ErrorAction SilentlyContinue
+
       - name: Second run reuses the running instance (unix)
         if: runner.os != 'Windows'
         env:
