@@ -1,3 +1,5 @@
+mod markdown;
+
 use std::io::{self, Write};
 
 use anstyle::{AnsiColor, Color, Style};
@@ -36,6 +38,8 @@ pub enum OutputFormat {
     Pretty,
     /// A versioned JSON document for scripts and agents
     Json,
+    /// Markdown for notes and documents
+    Markdown,
     /// Text without colors, numbering or engine names
     Plain,
     /// Result URLs, one per line
@@ -57,6 +61,7 @@ pub fn render(
     match format {
         OutputFormat::Pretty => render_pretty(response, out),
         OutputFormat::Json => render_json(response, out),
+        OutputFormat::Markdown => markdown::render(response, out),
         OutputFormat::Plain => render_plain(response, out),
         OutputFormat::Urls => render_urls(response, out),
     }

@@ -100,6 +100,13 @@ fn full_response() {
 }
 
 #[test]
+fn full_response_as_markdown() {
+    let rendered = unstyled(&full(), OutputFormat::Markdown);
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
 fn full_response_as_plain_text() {
     let rendered = unstyled(&full(), OutputFormat::Plain);
 

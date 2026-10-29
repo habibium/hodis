@@ -1,0 +1,19 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+> Ownership is Rust's memory discipline: every value has one owner, and the value is dropped when that owner goes out of scope.
+>
+> [doc.rust-lang.org](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)
+
+1. [What Is Ownership? - The Rust Programming Language](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)
+
+   Ownership is a set of rules that govern how a Rust program manages memory.
+
+2. [Scoping rules - Rust By Example](https://doc.rust-lang.org/rust-by-example/scope/move.html)
+
+   Resources can only have one owner at a time.
+
+3. [Rust ownership, borrowing and lifetimes](https://example.com/blog/rust-ownership)
+
+   A walkthrough of moves, borrows and lifetimes with worked examples.
