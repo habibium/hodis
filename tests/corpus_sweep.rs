@@ -1,8 +1,7 @@
 //! Full-corpus certification: parse every recorded response in `local/samples`.
 //!
-//! The corpus is gitignored and regenerable, so this test is ignored by
-//! default. Run it with `cargo test-all` (or `cargo test -- --include-ignored`)
-//! after generating a corpus with `cargo corpus`.
+//! Ignored by default: the corpus is gitignored and regenerable with
+//! `cargo corpus`.
 
 use anyhow::Context;
 use url::Url;

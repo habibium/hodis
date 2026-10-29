@@ -8,6 +8,7 @@ use url::Url;
 
 use hodis::{
     SearchParams, SearchProvider,
+    engine::{Engine, is_reachable},
     output::{render, render_diagnostics},
     providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
 };
@@ -27,9 +28,19 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
-    let searxng = SearXNGProvider {
-        base_url: Url::parse(SEARXNG_BASE_URL)?,
+    let mut out = AutoStream::auto(io::stdout().lock());
+    let mut err = AutoStream::auto(io::stderr().lock());
+
+    // The default instance is one the user may or may not be running; when
+    // nothing answers there, fall back to the engine hodis manages itself.
+    let default_url = Url::parse(SEARXNG_BASE_URL)?;
+    let base_url = if is_reachable(&client, &default_url).await {
+        default_url
+    } else {
+        Engine::resolve()?.ensure_running(&client, &mut err).await?
     };
+
+    let searxng = SearXNGProvider { base_url };
     let params = SearchParams {
         query: cli.query.join(" "),
         page: cli.page,
@@ -37,8 +48,6 @@ async fn main() -> Result<()> {
 
     let response = searxng.search(&client, &params).await?;
 
-    let mut out = AutoStream::auto(io::stdout().lock());
-    let mut err = AutoStream::auto(io::stderr().lock());
     render(&response, &mut out)?;
     render_diagnostics(&response.diagnostics, &mut err)?;
 

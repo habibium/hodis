@@ -1,8 +1,7 @@
 //! Pins the serialized output contract.
 //!
-//! The JSON form of `SearchResponse` is a machine-readable API consumed by
-//! scripts and agents. These tests freeze field names, casing, and null
-//! representation; a failure here means the public contract changed.
+//! `SearchResponse`'s JSON form is a machine-readable API consumed by scripts
+//! and agents; a failure here means that public contract changed.
 
 use serde_json::json;
 use url::Url;

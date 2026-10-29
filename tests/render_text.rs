@@ -1,8 +1,7 @@
 //! Layout policies of the human-readable text renderer.
 //!
-//! These tests pin the rules a reader relies on: where the answer block sits,
-//! when optional segments disappear, and how results are separated. Content is
-//! compared with ANSI escapes stripped; one test guards the escapes themselves.
+//! Content is compared with ANSI escapes stripped; one test guards the escapes
+//! themselves.
 
 use anstream::adapter::strip_str;
 use url::Url;
