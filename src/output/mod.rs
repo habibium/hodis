@@ -1,8 +1,14 @@
 use std::io::{self, Write};
 
 use anstyle::{AnsiColor, Color, Style};
+use clap::ValueEnum;
+use serde::Serialize;
 
 use crate::{Diagnostics, SearchResponse};
+
+/// Version of the `json` format's schema: the major part changes when a field
+/// is removed, renamed or retyped, the minor part when one is added.
+const SCHEMA_VERSION: &str = "1.0.0";
 
 const ANSWER: Style = Style::new().bold();
 const SOURCE: Style = Style::new().dimmed();
@@ -24,13 +30,33 @@ const SETUP: Style = Style::new()
     .fg_color(Some(Color::Ansi(AnsiColor::Green)));
 const SETUP_TEXT: Style = Style::new().dimmed();
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
-    Text,
+    /// Styled text for reading in a terminal
+    Pretty,
+    /// A versioned JSON document for scripts and agents
     Json,
 }
 
-pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
+#[derive(Serialize)]
+struct Versioned<'a> {
+    schema_version: &'static str,
+    #[serde(flatten)]
+    response: &'a SearchResponse,
+}
+
+pub fn render(
+    response: &SearchResponse,
+    format: OutputFormat,
+    out: &mut impl Write,
+) -> io::Result<()> {
+    match format {
+        OutputFormat::Pretty => render_pretty(response, out),
+        OutputFormat::Json => render_json(response, out),
+    }
+}
+
+fn render_pretty(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
     if let Some(answer) = &response.answer {
         let answer_text = one_line(&answer.content);
         writeln!(out, "{ANSWER}{answer_text}{ANSWER:#}")?;
@@ -59,6 +85,15 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
     }
 
     Ok(())
+}
+
+fn render_json(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
+    let document = Versioned {
+        schema_version: SCHEMA_VERSION,
+        response,
+    };
+    serde_json::to_writer_pretty(&mut *out, &document)?;
+    writeln!(out)
 }
 
 pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> {

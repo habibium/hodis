@@ -1,4 +1,4 @@
-//! Layout policies of the human-readable text renderer.
+//! Layout policies of the `pretty` renderer.
 //!
 //! Content is compared with ANSI escapes stripped; two tests guard the escapes
 //! themselves.
@@ -8,7 +8,7 @@ use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
-    output::{render, render_diagnostics},
+    output::{OutputFormat, render, render_diagnostics},
 };
 
 fn parse_url(raw: &str) -> Url {
@@ -51,7 +51,7 @@ fn engine_issue(engine: &str, reason: &str) -> EngineIssue {
 
 fn styled(response: &SearchResponse) -> String {
     let mut out = Vec::new();
-    render(response, &mut out).expect("writing to a Vec cannot fail");
+    render(response, OutputFormat::Pretty, &mut out).expect("writing to a Vec cannot fail");
     String::from_utf8(out).expect("the renderer emits utf-8")
 }
 

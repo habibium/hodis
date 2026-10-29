@@ -9,7 +9,7 @@ use url::Url;
 use hodis::{
     SearchParams, SearchProvider,
     engine::{Engine, is_reachable},
-    output::{render, render_diagnostics},
+    output::{OutputFormat, render, render_diagnostics},
     providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
 };
 
@@ -22,6 +22,9 @@ struct Cli {
     /// Result page number (starts at 1)
     #[arg(short, long, value_name = "NUMBER")]
     page: Option<NonZeroU32>,
+    /// Output format
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Pretty)]
+    format: OutputFormat,
     /// When to use colors
     #[arg(long, value_name = "WHEN", value_enum, default_value_t = ColorWhen::Auto)]
     color: ColorWhen,
@@ -69,7 +72,7 @@ async fn main() -> Result<()> {
 
     let response = searxng.search(&client, &params).await?;
 
-    render(&response, &mut out)?;
+    render(&response, cli.format, &mut out)?;
     render_diagnostics(&response.diagnostics, &mut err)?;
 
     Ok(())
@@ -80,6 +83,7 @@ mod tests {
     use clap::{CommandFactory, Parser};
 
     use super::{Cli, ColorWhen};
+    use hodis::output::OutputFormat;
 
     #[test]
     fn the_cli_definition_is_valid() {
@@ -87,8 +91,9 @@ mod tests {
     }
 
     #[test]
-    fn color_is_automatic_by_default() {
+    fn output_defaults_to_pretty_with_automatic_color() {
         let cli = Cli::try_parse_from(["hodis", "rust"]).expect("a bare query parses");
+        assert_eq!(cli.format, OutputFormat::Pretty);
         assert!(matches!(cli.color, ColorWhen::Auto));
     }
 }

@@ -8,7 +8,7 @@ use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
-    output::{render, render_diagnostics},
+    output::{OutputFormat, render, render_diagnostics},
 };
 
 fn parse_url(raw: &str) -> Url {
@@ -51,7 +51,7 @@ fn engine_issue(engine: &str, reason: &str) -> EngineIssue {
 
 fn plain(response: &SearchResponse) -> String {
     let mut out = Vec::new();
-    render(response, &mut out).expect("writing to a Vec cannot fail");
+    render(response, OutputFormat::Pretty, &mut out).expect("writing to a Vec cannot fail");
     let text = String::from_utf8(out).expect("the renderer emits utf-8");
     strip_str(&text).to_string()
 }
