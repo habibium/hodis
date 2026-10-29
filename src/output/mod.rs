@@ -32,7 +32,7 @@ pub enum OutputFormat {
 
 pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
     if let Some(answer) = &response.answer {
-        let answer_text = &answer.content;
+        let answer_text = one_line(&answer.content);
         writeln!(out, "{ANSWER}{answer_text}{ANSWER:#}")?;
         if let Some(url) = &answer.url {
             writeln!(out, "{SOURCE}{url}{SOURCE:#}")?;
@@ -45,14 +45,16 @@ pub fn render(response: &SearchResponse, out: &mut impl Write) -> io::Result<()>
             writeln!(out)?;
         }
 
-        write!(out, "{TITLE}{i}. {}{TITLE:#}", result.title)?;
-        if !result.source.is_empty() {
-            write!(out, " {SOURCE}[{}]{SOURCE:#}", result.source)?;
+        write!(out, "{TITLE}{i}. {}{TITLE:#}", one_line(&result.title))?;
+        let source = one_line(&result.source);
+        if !source.is_empty() {
+            write!(out, " {SOURCE}[{source}]{SOURCE:#}")?;
         }
         writeln!(out)?;
         writeln!(out, "{URL}{}{URL:#}", result.url)?;
-        if !result.snippet.is_empty() {
-            writeln!(out, "{}", result.snippet)?;
+        let snippet = one_line(&result.snippet);
+        if !snippet.is_empty() {
+            writeln!(out, "{snippet}")?;
         }
     }
 
@@ -83,7 +85,8 @@ pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io
             write!(
                 out,
                 "{DIAG_TEXT}{sep} {} ({}){DIAG_TEXT:#}",
-                engine.engine, engine.reason
+                one_line(&engine.engine),
+                one_line(&engine.reason)
             )?;
         }
         writeln!(out)?;
@@ -103,4 +106,14 @@ pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io
     }
 
     Ok(())
+}
+
+/// Provider text as a single line. Control characters are dropped because a
+/// terminal acts on them, e.g. on escape sequences planted in a page title.
+fn one_line(text: &str) -> String {
+    text.split_whitespace()
+        .map(|word| word.chars().filter(|c| !c.is_control()).collect::<String>())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }

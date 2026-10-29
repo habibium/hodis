@@ -1,6 +1,6 @@
 //! Layout policies of the human-readable text renderer.
 //!
-//! Content is compared with ANSI escapes stripped; one test guards the escapes
+//! Content is compared with ANSI escapes stripped; two tests guard the escapes
 //! themselves.
 
 use anstream::adapter::strip_str;
@@ -238,4 +238,46 @@ fn styles_are_always_emitted() {
     ));
 
     assert!(raw.contains("\x1b["), "ANSI escapes reach the writer");
+}
+
+#[test]
+fn control_characters_in_provider_text_never_reach_the_writer() {
+    // With colour on, the stream passes escapes through untouched, so any
+    // planted in a page title would be acted on by the terminal.
+    let raw = styled(&response(
+        Some(answer("Answer\u{1b}]0;retitled\u{7}", None)),
+        vec![search_result(
+            "Title\u{1b}[2J",
+            "https://example.com/hostile",
+            "Snippet\u{9b}5m",
+            "mojeek\u{1b}[8m",
+        )],
+    ));
+
+    for planted in ["\u{1b}]0;", "\u{7}", "\u{1b}[2J", "\u{9b}", "\u{1b}[8m"] {
+        assert!(!raw.contains(planted), "{planted:?} must not be written");
+    }
+}
+
+#[test]
+fn line_breaks_in_provider_text_collapse_to_spaces() {
+    let text = plain(&response(
+        None,
+        vec![search_result(
+            "Split\ntitle",
+            "https://example.com/split",
+            "First line.\n\nSecond line.",
+            "mojeek",
+        )],
+    ));
+
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(
+        lines,
+        [
+            "1. Split title [mojeek]",
+            "https://example.com/split",
+            "First line. Second line.",
+        ]
+    );
 }
