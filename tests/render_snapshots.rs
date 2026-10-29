@@ -1,7 +1,7 @@
-//! Whole-output snapshots of the human-readable text renderer.
+//! Whole-output snapshots of the text renderers.
 //!
-//! `render_text.rs` pins individual policies; these catch drift in the output
-//! as a whole. ANSI escapes are stripped so `.snap` files stay readable.
+//! The `render_*.rs` files pin individual policies; these catch drift in the
+//! output as a whole. ANSI escapes are stripped so `.snap` files stay readable.
 
 use anstream::adapter::strip_str;
 use url::Url;
@@ -49,23 +49,22 @@ fn engine_issue(engine: &str, reason: &str) -> EngineIssue {
     }
 }
 
-fn plain(response: &SearchResponse) -> String {
+fn unstyled(response: &SearchResponse, format: OutputFormat) -> String {
     let mut out = Vec::new();
-    render(response, OutputFormat::Pretty, &mut out).expect("writing to a Vec cannot fail");
+    render(response, format, &mut out).expect("writing to a Vec cannot fail");
     let text = String::from_utf8(out).expect("the renderer emits utf-8");
     strip_str(&text).to_string()
 }
 
-fn plain_diagnostics(diagnostics: &Diagnostics) -> String {
+fn unstyled_diagnostics(diagnostics: &Diagnostics) -> String {
     let mut out = Vec::new();
     render_diagnostics(diagnostics, &mut out).expect("writing to a Vec cannot fail");
     let text = String::from_utf8(out).expect("the renderer emits utf-8");
     strip_str(&text).to_string()
 }
 
-#[test]
-fn full_response() {
-    let rendered = plain(&response(
+fn full() -> SearchResponse {
+    response(
         Some(answer(
             "Ownership is Rust's memory discipline: every value has one owner, and the value is dropped when that owner goes out of scope.",
             Some("https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"),
@@ -90,52 +89,77 @@ fn full_response() {
                 "mojeek",
             ),
         ],
-    ));
+    )
+}
+
+#[test]
+fn full_response() {
+    let rendered = unstyled(&full(), OutputFormat::Pretty);
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn full_response_as_plain_text() {
+    let rendered = unstyled(&full(), OutputFormat::Plain);
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn full_response_as_urls() {
+    let rendered = unstyled(&full(), OutputFormat::Urls);
 
     insta::assert_snapshot!(rendered);
 }
 
 #[test]
 fn results_without_an_answer() {
-    let rendered = plain(&response(
-        None,
-        vec![
-            search_result(
-                "The Rust Programming Language",
-                "https://doc.rust-lang.org/book/",
-                "An introductory book about Rust.",
-                "duckduckgo",
-            ),
-            search_result(
-                "Rust Forge",
-                "https://forge.rust-lang.org/",
-                "Documentation for the Rust project's infrastructure and processes.",
-                "startpage",
-            ),
-        ],
-    ));
+    let rendered = unstyled(
+        &response(
+            None,
+            vec![
+                search_result(
+                    "The Rust Programming Language",
+                    "https://doc.rust-lang.org/book/",
+                    "An introductory book about Rust.",
+                    "duckduckgo",
+                ),
+                search_result(
+                    "Rust Forge",
+                    "https://forge.rust-lang.org/",
+                    "Documentation for the Rust project's infrastructure and processes.",
+                    "startpage",
+                ),
+            ],
+        ),
+        OutputFormat::Pretty,
+    );
 
     insta::assert_snapshot!(rendered);
 }
 
 #[test]
 fn minimal_result() {
-    let rendered = plain(&response(
-        None,
-        vec![search_result(
-            "Untitled source",
-            "https://example.com/minimal",
-            "",
-            "",
-        )],
-    ));
+    let rendered = unstyled(
+        &response(
+            None,
+            vec![search_result(
+                "Untitled source",
+                "https://example.com/minimal",
+                "",
+                "",
+            )],
+        ),
+        OutputFormat::Pretty,
+    );
 
     insta::assert_snapshot!(rendered);
 }
 
 #[test]
 fn diagnostics_with_engines_and_skips() {
-    let rendered = plain_diagnostics(&Diagnostics {
+    let rendered = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: vec![
             engine_issue("brave", "CAPTCHA"),
             engine_issue("mojeek", "timeout"),

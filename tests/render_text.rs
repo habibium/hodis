@@ -55,11 +55,11 @@ fn styled(response: &SearchResponse) -> String {
     String::from_utf8(out).expect("the renderer emits utf-8")
 }
 
-fn plain(response: &SearchResponse) -> String {
+fn unstyled(response: &SearchResponse) -> String {
     strip_str(&styled(response)).to_string()
 }
 
-fn plain_diagnostics(diagnostics: &Diagnostics) -> String {
+fn unstyled_diagnostics(diagnostics: &Diagnostics) -> String {
     let mut out = Vec::new();
     render_diagnostics(diagnostics, &mut out).expect("writing to a Vec cannot fail");
     let text = String::from_utf8(out).expect("the renderer emits utf-8");
@@ -68,7 +68,7 @@ fn plain_diagnostics(diagnostics: &Diagnostics) -> String {
 
 #[test]
 fn the_answer_leads_the_results() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         Some(answer(
             "Oslo is the capital of Norway.",
             Some("https://en.wikipedia.org/wiki/Oslo"),
@@ -92,7 +92,7 @@ fn the_answer_leads_the_results() {
 
 #[test]
 fn a_response_without_an_answer_starts_at_the_first_result() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![search_result(
             "Leading title",
@@ -110,7 +110,7 @@ fn a_response_without_an_answer_starts_at_the_first_result() {
 
 #[test]
 fn an_empty_source_omits_the_bracket_segment() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![search_result(
             "Untagged result",
@@ -127,7 +127,7 @@ fn an_empty_source_omits_the_bracket_segment() {
 
 #[test]
 fn an_empty_snippet_omits_the_snippet_line() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![
             search_result("No snippet", "https://example.com/first", "", "mojeek"),
@@ -156,7 +156,7 @@ fn an_empty_snippet_omits_the_snippet_line() {
 
 #[test]
 fn results_are_separated_by_a_single_blank_line() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![
             search_result("First", "https://example.com/1", "One.", "mojeek"),
@@ -189,14 +189,14 @@ fn clean_diagnostics_render_nothing() {
 
 #[test]
 fn the_skipped_result_count_is_pluralized() {
-    let one = plain_diagnostics(&Diagnostics {
+    let one = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: Vec::new(),
         skipped_results: 1,
     });
     assert!(one.contains("warning: skipped 1 malformed result"));
     assert!(!one.contains("malformed results"));
 
-    let many = plain_diagnostics(&Diagnostics {
+    let many = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: Vec::new(),
         skipped_results: 2,
     });
@@ -205,7 +205,7 @@ fn the_skipped_result_count_is_pluralized() {
 
 #[test]
 fn unresponsive_engines_are_comma_separated() {
-    let text = plain_diagnostics(&Diagnostics {
+    let text = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: vec![
             engine_issue("brave", "CAPTCHA"),
             engine_issue("mojeek", "timeout"),
@@ -261,7 +261,7 @@ fn control_characters_in_provider_text_never_reach_the_writer() {
 
 #[test]
 fn line_breaks_in_provider_text_collapse_to_spaces() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![search_result(
             "Split\ntitle",

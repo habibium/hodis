@@ -36,6 +36,10 @@ pub enum OutputFormat {
     Pretty,
     /// A versioned JSON document for scripts and agents
     Json,
+    /// Text without colors, numbering or engine names
+    Plain,
+    /// Result URLs, one per line
+    Urls,
 }
 
 #[derive(Serialize)]
@@ -53,6 +57,8 @@ pub fn render(
     match format {
         OutputFormat::Pretty => render_pretty(response, out),
         OutputFormat::Json => render_json(response, out),
+        OutputFormat::Plain => render_plain(response, out),
+        OutputFormat::Urls => render_urls(response, out),
     }
 }
 
@@ -94,6 +100,37 @@ fn render_json(response: &SearchResponse, out: &mut impl Write) -> io::Result<()
     };
     serde_json::to_writer_pretty(&mut *out, &document)?;
     writeln!(out)
+}
+
+fn render_plain(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
+    if let Some(answer) = &response.answer {
+        writeln!(out, "{}", one_line(&answer.content))?;
+        if let Some(url) = &answer.url {
+            writeln!(out, "{url}")?;
+        }
+    }
+
+    for (i, result) in response.results.iter().enumerate() {
+        if i > 0 || response.answer.is_some() {
+            writeln!(out)?;
+        }
+
+        writeln!(out, "{}", one_line(&result.title))?;
+        writeln!(out, "{}", result.url)?;
+        let snippet = one_line(&result.snippet);
+        if !snippet.is_empty() {
+            writeln!(out, "{snippet}")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn render_urls(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
+    for result in &response.results {
+        writeln!(out, "{}", result.url)?;
+    }
+    Ok(())
 }
 
 pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> {
