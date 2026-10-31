@@ -5,12 +5,11 @@ use std::io::{self, Write};
 use anstream::ColorChoice;
 use anstyle::{AnsiColor, Color, Style};
 use clap::ValueEnum;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{Diagnostics, SearchResponse};
 
-/// Version of the `json` format's schema: the major part changes when a field
-/// is removed, renamed or retyped, the minor part when one is added.
 const SCHEMA_VERSION: &str = "1.0.0";
 
 const ANSWER: Style = Style::new().bold();
@@ -66,11 +65,23 @@ impl From<ColorWhen> for ColorChoice {
     }
 }
 
-#[derive(Serialize)]
-struct Versioned<'a> {
+/// The `json` format's document: a [`SearchResponse`], or a reference to one,
+/// stamped with the version of its schema.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Versioned<R> {
+    /// A major change removes, renames or retypes a field; a minor one adds one.
     schema_version: &'static str,
     #[serde(flatten)]
-    response: &'a SearchResponse,
+    response: R,
+}
+
+impl<R> Versioned<R> {
+    pub fn new(response: R) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            response,
+        }
+    }
 }
 
 pub fn render(
@@ -119,11 +130,7 @@ fn render_pretty(response: &SearchResponse, out: &mut impl Write) -> io::Result<
 }
 
 fn render_json(response: &SearchResponse, out: &mut impl Write) -> io::Result<()> {
-    let document = Versioned {
-        schema_version: SCHEMA_VERSION,
-        response,
-    };
-    serde_json::to_writer_pretty(&mut *out, &document)?;
+    serde_json::to_writer_pretty(&mut *out, &Versioned::new(response))?;
     writeln!(out)
 }
 

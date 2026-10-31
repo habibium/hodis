@@ -9,7 +9,7 @@ use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
-    output::{OutputFormat, render},
+    output::{OutputFormat, Versioned, render},
 };
 
 fn json_output(response: &SearchResponse) -> anyhow::Result<Value> {
@@ -18,9 +18,9 @@ fn json_output(response: &SearchResponse) -> anyhow::Result<Value> {
     Ok(serde_json::from_slice(&out)?)
 }
 
-#[test]
-fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
-    let response = SearchResponse {
+/// A response with an answer, a result and diagnostics.
+fn full_response() -> anyhow::Result<SearchResponse> {
+    Ok(SearchResponse {
         query: "capital of norway".to_owned(),
         answer: Some(Answer {
             url: Some(Url::parse("https://en.wikipedia.org/wiki/Oslo")?),
@@ -41,8 +41,11 @@ fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
             }],
             skipped_results: 2,
         },
-    };
+    })
+}
 
+#[test]
+fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
     let expected = json!({
         "schema_version": "1.0.0",
         "query": "capital of norway",
@@ -66,7 +69,33 @@ fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
         }
     });
 
-    assert_eq!(json_output(&response)?, expected);
+    assert_eq!(json_output(&full_response()?)?, expected);
+    Ok(())
+}
+
+#[test]
+fn json_output_conforms_to_its_schema() -> anyhow::Result<()> {
+    let schema = serde_json::to_value(schemars::schema_for!(Versioned<SearchResponse>))?;
+    let validator = jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)?;
+
+    let mut rich = full_response()?;
+    rich.results.push(SearchResult {
+        image: Some(Url::parse("https://example.org/oslo.jpg")?),
+        ..rich.results[0].clone()
+    });
+    let mut sparse = full_response()?;
+    sparse.answer = None;
+    sparse.diagnostics = Diagnostics::default();
+    for response in [rich, sparse] {
+        let document = json_output(&response)?;
+        let errors: Vec<_> = validator
+            .iter_errors(&document)
+            .map(|e| e.to_string())
+            .collect();
+        assert!(errors.is_empty(), "{errors:#?}\n{document:#}");
+    }
     Ok(())
 }
 
