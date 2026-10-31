@@ -1,4 +1,7 @@
-use std::{io, num::NonZeroU32};
+use std::{
+    io::{self, Write},
+    num::NonZeroU32,
+};
 
 use anstream::{AutoStream, ColorChoice};
 use anyhow::Result;
@@ -38,10 +41,7 @@ async fn main() -> Result<()> {
         path,
         unknown_keys,
     } = Config::load()?;
-    let format = cli.format.unwrap_or(config.format);
     ColorChoice::from(cli.color.unwrap_or(config.color)).write_global();
-    let client = Client::builder().timeout(config.timeout).build()?;
-    let mut out = AutoStream::auto(io::stdout().lock());
     let mut err = AutoStream::auto(io::stderr().lock());
 
     if let Some(path) = &path {
@@ -53,19 +53,27 @@ async fn main() -> Result<()> {
         }
     }
 
+    search(cli, config, &mut err).await
+}
+
+async fn search(args: Cli, config: Config, err: &mut impl Write) -> Result<()> {
+    let format = args.format.unwrap_or(config.format);
+    let client = Client::builder().timeout(config.timeout).build()?;
+    let mut out = AutoStream::auto(io::stdout().lock());
+
     // The instance is one the user may or may not be running; when nothing
     // answers there, fall back to the engine hodis manages itself, if allowed.
     let instance = config.searxng;
     let base_url = if !instance.embedded || is_reachable(&client, &instance.url).await {
         instance.url
     } else {
-        Engine::resolve()?.ensure_running(&client, &mut err).await?
+        Engine::resolve()?.ensure_running(&client, err).await?
     };
 
     let searxng = SearXNGProvider { base_url };
     let params = SearchParams {
-        query: cli.query.join(" "),
-        page: cli.page,
+        query: args.query.join(" "),
+        page: args.page,
     };
 
     let response = searxng.search(&client, &params).await?;
@@ -76,7 +84,7 @@ async fn main() -> Result<()> {
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return Ok(()),
         result => result?,
     }
-    render_diagnostics(&response.diagnostics, &mut err)?;
+    render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
 }
