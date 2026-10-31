@@ -13,7 +13,7 @@ mod settings;
 
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -457,9 +457,11 @@ fn find_shallow(dir: &Path, name: &OsStr) -> Option<PathBuf> {
         })
 }
 
-/// Inherits stdout and stderr so uv's own progress reaches the terminal.
+/// uv's progress reaches the terminal through stderr, its stdout included:
+/// hodis's own stdout carries search output only.
 fn run(command: &mut Command, what: &str) -> Result<()> {
     let status = command
+        .stdout(io::stderr())
         .status()
         .with_context(|| format!("cannot run uv to {what}"))?;
     ensure!(status.success(), "uv could not {what}");

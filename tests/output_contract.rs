@@ -1,17 +1,25 @@
 //! Pins the serialized output contract.
 //!
-//! `SearchResponse`'s JSON form is a machine-readable API consumed by scripts
-//! and agents; a failure here means that public contract changed.
+//! The `json` format is a machine-readable API consumed by scripts and agents;
+//! a failure here means that public contract changed, and its schema version
+//! with it.
 
-use serde_json::json;
+use serde_json::{Value, json};
 use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
+    output::{OutputFormat, render},
 };
 
+fn json_output(response: &SearchResponse) -> anyhow::Result<Value> {
+    let mut out = Vec::new();
+    render(response, OutputFormat::Json, &mut out)?;
+    Ok(serde_json::from_slice(&out)?)
+}
+
 #[test]
-fn search_response_serializes_to_the_frozen_shape() -> anyhow::Result<()> {
+fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
     let response = SearchResponse {
         query: "capital of norway".to_owned(),
         answer: Some(Answer {
@@ -36,6 +44,7 @@ fn search_response_serializes_to_the_frozen_shape() -> anyhow::Result<()> {
     };
 
     let expected = json!({
+        "schema_version": "1.0.0",
         "query": "capital of norway",
         "answer": {
             "url": "https://en.wikipedia.org/wiki/Oslo",
@@ -57,7 +66,21 @@ fn search_response_serializes_to_the_frozen_shape() -> anyhow::Result<()> {
         }
     });
 
-    assert_eq!(serde_json::to_value(&response)?, expected);
+    assert_eq!(json_output(&response)?, expected);
+    Ok(())
+}
+
+#[test]
+fn an_absent_answer_is_null_rather_than_missing() -> anyhow::Result<()> {
+    let response = SearchResponse {
+        query: "no answer".to_owned(),
+        answer: None,
+        results: Vec::new(),
+        provider: Provider::SearXNG,
+        diagnostics: Diagnostics::default(),
+    };
+
+    assert_eq!(json_output(&response)?.get("answer"), Some(&Value::Null));
     Ok(())
 }
 

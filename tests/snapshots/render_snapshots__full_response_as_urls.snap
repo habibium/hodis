@@ -1,0 +1,7 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html
+https://doc.rust-lang.org/rust-by-example/scope/move.html
+https://example.com/blog/rust-ownership

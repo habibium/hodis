@@ -1,6 +1,6 @@
-//! Layout policies of the human-readable text renderer.
+//! Layout policies of the `pretty` renderer.
 //!
-//! Content is compared with ANSI escapes stripped; one test guards the escapes
+//! Content is compared with ANSI escapes stripped; two tests guard the escapes
 //! themselves.
 
 use anstream::adapter::strip_str;
@@ -8,7 +8,7 @@ use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
-    output::{render, render_diagnostics},
+    output::{OutputFormat, render, render_diagnostics},
 };
 
 fn parse_url(raw: &str) -> Url {
@@ -51,15 +51,15 @@ fn engine_issue(engine: &str, reason: &str) -> EngineIssue {
 
 fn styled(response: &SearchResponse) -> String {
     let mut out = Vec::new();
-    render(response, &mut out).expect("writing to a Vec cannot fail");
+    render(response, OutputFormat::Pretty, &mut out).expect("writing to a Vec cannot fail");
     String::from_utf8(out).expect("the renderer emits utf-8")
 }
 
-fn plain(response: &SearchResponse) -> String {
+fn unstyled(response: &SearchResponse) -> String {
     strip_str(&styled(response)).to_string()
 }
 
-fn plain_diagnostics(diagnostics: &Diagnostics) -> String {
+fn unstyled_diagnostics(diagnostics: &Diagnostics) -> String {
     let mut out = Vec::new();
     render_diagnostics(diagnostics, &mut out).expect("writing to a Vec cannot fail");
     let text = String::from_utf8(out).expect("the renderer emits utf-8");
@@ -68,7 +68,7 @@ fn plain_diagnostics(diagnostics: &Diagnostics) -> String {
 
 #[test]
 fn the_answer_leads_the_results() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         Some(answer(
             "Oslo is the capital of Norway.",
             Some("https://en.wikipedia.org/wiki/Oslo"),
@@ -92,7 +92,7 @@ fn the_answer_leads_the_results() {
 
 #[test]
 fn a_response_without_an_answer_starts_at_the_first_result() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![search_result(
             "Leading title",
@@ -110,7 +110,7 @@ fn a_response_without_an_answer_starts_at_the_first_result() {
 
 #[test]
 fn an_empty_source_omits_the_bracket_segment() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![search_result(
             "Untagged result",
@@ -127,7 +127,7 @@ fn an_empty_source_omits_the_bracket_segment() {
 
 #[test]
 fn an_empty_snippet_omits_the_snippet_line() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![
             search_result("No snippet", "https://example.com/first", "", "mojeek"),
@@ -156,7 +156,7 @@ fn an_empty_snippet_omits_the_snippet_line() {
 
 #[test]
 fn results_are_separated_by_a_single_blank_line() {
-    let text = plain(&response(
+    let text = unstyled(&response(
         None,
         vec![
             search_result("First", "https://example.com/1", "One.", "mojeek"),
@@ -189,14 +189,14 @@ fn clean_diagnostics_render_nothing() {
 
 #[test]
 fn the_skipped_result_count_is_pluralized() {
-    let one = plain_diagnostics(&Diagnostics {
+    let one = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: Vec::new(),
         skipped_results: 1,
     });
     assert!(one.contains("warning: skipped 1 malformed result"));
     assert!(!one.contains("malformed results"));
 
-    let many = plain_diagnostics(&Diagnostics {
+    let many = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: Vec::new(),
         skipped_results: 2,
     });
@@ -205,7 +205,7 @@ fn the_skipped_result_count_is_pluralized() {
 
 #[test]
 fn unresponsive_engines_are_comma_separated() {
-    let text = plain_diagnostics(&Diagnostics {
+    let text = unstyled_diagnostics(&Diagnostics {
         unresponsive_engines: vec![
             engine_issue("brave", "CAPTCHA"),
             engine_issue("mojeek", "timeout"),
@@ -238,4 +238,46 @@ fn styles_are_always_emitted() {
     ));
 
     assert!(raw.contains("\x1b["), "ANSI escapes reach the writer");
+}
+
+#[test]
+fn control_characters_in_provider_text_never_reach_the_writer() {
+    // With colour on, the stream passes escapes through untouched, so any
+    // planted in a page title would be acted on by the terminal.
+    let raw = styled(&response(
+        Some(answer("Answer\u{1b}]0;retitled\u{7}", None)),
+        vec![search_result(
+            "Title\u{1b}[2J",
+            "https://example.com/hostile",
+            "Snippet\u{9b}5m",
+            "mojeek\u{1b}[8m",
+        )],
+    ));
+
+    for planted in ["\u{1b}]0;", "\u{7}", "\u{1b}[2J", "\u{9b}", "\u{1b}[8m"] {
+        assert!(!raw.contains(planted), "{planted:?} must not be written");
+    }
+}
+
+#[test]
+fn line_breaks_in_provider_text_collapse_to_spaces() {
+    let text = unstyled(&response(
+        None,
+        vec![search_result(
+            "Split\ntitle",
+            "https://example.com/split",
+            "First line.\n\nSecond line.",
+            "mojeek",
+        )],
+    ));
+
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(
+        lines,
+        [
+            "1. Split title [mojeek]",
+            "https://example.com/split",
+            "First line. Second line.",
+        ]
+    );
 }
