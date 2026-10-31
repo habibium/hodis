@@ -8,7 +8,7 @@ use url::Url;
 
 use hodis::{
     Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
-    output::{OutputFormat, render, render_diagnostics},
+    output::{OutputFormat, render, render_diagnostics, render_warning},
 };
 
 fn parse_url(raw: &str) -> Url {
@@ -279,5 +279,18 @@ fn line_breaks_in_provider_text_collapse_to_spaces() {
             "https://example.com/split",
             "First line. Second line.",
         ]
+    );
+}
+
+#[test]
+fn a_warning_is_a_single_prefixed_line() {
+    let mut out = Vec::new();
+    render_warning("unknown key `fromat` in config.toml", &mut out)
+        .expect("writing to a Vec cannot fail");
+    let text = String::from_utf8(out).expect("the renderer emits utf-8");
+
+    assert_eq!(
+        strip_str(&text).to_string(),
+        "warning: unknown key `fromat` in config.toml\n"
     );
 }
