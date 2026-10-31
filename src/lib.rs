@@ -12,11 +12,12 @@ use reqwest::Client;
 use serde::Serialize;
 use url::Url;
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
     DuckDuckGo,
     SearXNG,
+    Serper,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
