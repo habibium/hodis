@@ -70,7 +70,12 @@ async fn main() -> Result<()> {
 
     let response = searxng.search(&client, &params).await?;
 
-    render(&response, format, &mut out)?;
+    match render(&response, format, &mut out) {
+        // A reader that stops early, such as `head`, closes the pipe: that ends
+        // the output, the way it ends any other Unix tool's, without an error.
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return Ok(()),
+        result => result?,
+    }
     render_diagnostics(&response.diagnostics, &mut err)?;
 
     Ok(())
