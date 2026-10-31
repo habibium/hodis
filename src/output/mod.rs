@@ -203,6 +203,13 @@ pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io
     Ok(())
 }
 
+pub fn render_warning(message: &str, out: &mut impl Write) -> io::Result<()> {
+    writeln!(
+        out,
+        "{WARN}warning:{WARN:#} {DIAG_TEXT}{message}{DIAG_TEXT:#}"
+    )
+}
+
 /// Provider text as a single line. Control characters are dropped because a
 /// terminal acts on them, e.g. on escape sequences planted in a page title.
 fn one_line(text: &str) -> String {
