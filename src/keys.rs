@@ -44,13 +44,37 @@ impl KeyedProvider {
         env::var_os(self.env_var()).is_some_and(|value| !value.is_empty())
     }
 
-    /// Names the provider's keychain entry, so it must never change: a new
-    /// name would orphan every key stored under the old one.
-    fn account(self) -> &'static str {
+    /// The provider's name on the command line, which also names its keychain
+    /// entry, so it must never change: a new name would orphan every key
+    /// stored under the old one.
+    #[must_use]
+    pub fn id(self) -> &'static str {
         match self {
             Self::Serper => "serper",
         }
     }
+}
+
+/// Finds a provider's key: in its environment variable when that is set, or
+/// else in the system keychain.
+pub fn find(provider: KeyedProvider) -> Result<ApiKey> {
+    let (name, var) = (provider.name(), provider.env_var());
+    if let Some(value) = env::var_os(var).filter(|value| !value.is_empty()) {
+        let value = value
+            .to_str()
+            .with_context(|| format!("{var} is not valid UTF-8"))?;
+        return ApiKey::new(value).with_context(|| format!("{var} does not hold a valid key"));
+    }
+
+    let keychain = Keychain::open().with_context(|| {
+        format!("no {name} API key: set {var}, as there is no system keychain to store one in")
+    })?;
+    keychain.get(provider)?.with_context(|| {
+        format!(
+            "no {name} API key: store one with `hodis key set {}` or set {var}",
+            provider.id()
+        )
+    })
 }
 
 /// An API key, kept out of its `Debug` output so it cannot reach a log or an
@@ -136,7 +160,7 @@ impl Keychain {
     }
 
     fn entry(&self, provider: KeyedProvider) -> Result<Entry> {
-        Ok(self.store.build(SERVICE, provider.account(), None)?)
+        Ok(self.store.build(SERVICE, provider.id(), None)?)
     }
 }
 

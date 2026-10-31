@@ -70,6 +70,13 @@ fn values_are_spelled_as_on_the_command_line() {
         let name = flag.get_name();
         assert_eq!(parse(&format!("format = '{name}'")).format, format);
     }
+    for &provider in Provider::value_variants() {
+        let flag = provider
+            .to_possible_value()
+            .expect("only offered providers are listed");
+        let name = flag.get_name();
+        assert_eq!(parse(&format!("provider = '{name}'")).provider, provider);
+    }
     for &color in ColorWhen::value_variants() {
         let flag = color
             .to_possible_value()
