@@ -59,7 +59,7 @@ fn null_fields_degrade_and_null_titles_are_skipped() -> anyhow::Result<()> {
     let answer = r.answer.expect("second answers entry is non-empty");
     assert!(answer.content.starts_with("Soldering"));
 
-    assert!(r.diagnostics.unresponsive_engines.is_empty());
+    assert_eq!(r.diagnostics.unresponsive_engines, []);
     Ok(())
 }
 
@@ -84,7 +84,7 @@ fn total_engine_outage_yields_empty_results_with_diagnostics() -> anyhow::Result
         include_str!("fixtures/engines_down.json"),
     )?;
 
-    assert!(r.results.is_empty());
+    assert_eq!(r.results, []);
     assert!(r.answer.is_none());
     assert_eq!(r.diagnostics.skipped_results, 0);
 
