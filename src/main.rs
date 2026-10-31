@@ -4,18 +4,16 @@ use std::{
 };
 
 use anstream::{AutoStream, ColorChoice};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use reqwest::Client;
-use url::Url;
 
 use hodis::{
-    Provider, SearchParams, SearchProvider,
-    config::{self, Config, Loaded, SearXNG},
-    engine::{Engine, is_reachable},
-    keys::{self, ApiKey, Keychain, KeyedProvider},
+    Provider, SearchParams,
+    config::{self, Config, Loaded},
+    keys::{ApiKey, Keychain, KeyedProvider},
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers::{searxng::SearXNGProvider, serper::SerperProvider},
+    providers,
 };
 
 #[derive(Parser)]
@@ -107,16 +105,8 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     let client = Client::builder().timeout(config.timeout).build()?;
     let mut out = AutoStream::auto(io::stdout().lock());
 
-    let provider: Box<dyn SearchProvider> = match args.provider.unwrap_or(config.provider) {
-        Provider::SearXNG => Box::new(SearXNGProvider {
-            base_url: searxng_url(&client, config.searxng, err).await?,
-        }),
-        Provider::Serper => Box::new(SerperProvider {
-            base_url: config.serper.url,
-            key: keys::find(KeyedProvider::Serper)?,
-        }),
-        Provider::DuckDuckGo => bail!("hodis cannot search DuckDuckGo yet"),
-    };
+    let provider = args.provider.unwrap_or(config.provider);
+    let provider = providers::connect(provider, &config, &client, err).await?;
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
@@ -133,17 +123,6 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
-}
-
-/// The configured instance is one the user may or may not be running; when
-/// nothing answers there, hodis falls back to the engine it runs itself, if
-/// allowed.
-async fn searxng_url(client: &Client, instance: SearXNG, progress: &mut impl Write) -> Result<Url> {
-    if !instance.embedded || is_reachable(client, &instance.url).await {
-        Ok(instance.url)
-    } else {
-        Engine::resolve()?.ensure_running(client, progress).await
-    }
 }
 
 fn manage_key(command: KeyCommand, err: &mut impl Write) -> Result<()> {
