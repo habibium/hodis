@@ -2,12 +2,12 @@ use std::{io, num::NonZeroU32};
 
 use anstream::{AutoStream, ColorChoice};
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use reqwest::Client;
 
 use hodis::{
     SearchParams, SearchProvider,
-    config::{Config, Loaded},
+    config::{self, Config, Loaded},
     engine::{Engine, is_reachable},
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
     providers::searxng::SearXNGProvider,
@@ -32,7 +32,7 @@ struct Cli {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_args();
     let Loaded {
         config,
         path,
@@ -74,6 +74,15 @@ async fn main() -> Result<()> {
     render_diagnostics(&response.diagnostics, &mut err)?;
 
     Ok(())
+}
+
+/// `Cli::parse`, with `--help` naming the config file.
+fn parse_args() -> Cli {
+    let mut command = Cli::command();
+    if let Some(path) = config::path() {
+        command = command.after_help(format!("Config file: {}", path.display()));
+    }
+    Cli::from_arg_matches(&command.get_matches()).unwrap_or_else(|e| e.exit())
 }
 
 #[cfg(test)]

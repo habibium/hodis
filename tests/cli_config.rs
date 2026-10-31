@@ -18,6 +18,22 @@ fn hodis(config: &Path, data: &TempDir, args: &[&str]) -> Output {
 }
 
 #[test]
+fn help_names_the_config_file() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let config = dir.path().join("config.toml");
+
+    let output = hodis(&config, &dir, &["--help"]);
+
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout)?;
+    assert!(
+        help.contains(&format!("Config file: {}", config.display())),
+        "{help}"
+    );
+    Ok(())
+}
+
+#[test]
 fn a_config_file_named_by_hodis_config_must_exist() -> anyhow::Result<()> {
     let dir = tempfile::tempdir()?;
     let config = dir.path().join("missing.toml");
