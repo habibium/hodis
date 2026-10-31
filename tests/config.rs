@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use clap::ValueEnum;
 
+use hodis::Provider;
 use hodis::config::Config;
 use hodis::output::{ColorWhen, OutputFormat};
 
@@ -22,11 +23,13 @@ fn an_empty_file_keeps_every_default() {
     let loaded = Config::parse("").expect("an empty file is valid");
 
     let config = loaded.config;
+    assert_eq!(config.provider, Provider::SearXNG);
     assert_eq!(config.format, OutputFormat::Pretty);
     assert_eq!(config.color, ColorWhen::Auto);
     assert_eq!(config.timeout, Duration::from_secs(10));
     assert_eq!(config.searxng.url.as_str(), "http://localhost:8888/");
     assert!(config.searxng.embedded);
+    assert_eq!(config.serper.url.as_str(), "https://google.serper.dev/");
     assert_eq!(loaded.unknown_keys, Vec::<String>::new());
 }
 
@@ -34,6 +37,7 @@ fn an_empty_file_keeps_every_default() {
 fn every_setting_is_read() {
     let config = parse(
         r#"
+        provider = "serper"
         format = "json"
         color = "never"
         timeout = 3
@@ -41,14 +45,22 @@ fn every_setting_is_read() {
         [searxng]
         url = "https://search.example.org/"
         embedded = true
+
+        [serper]
+        url = "https://serper-proxy.example.org/"
         "#,
     );
 
+    assert_eq!(config.provider, Provider::Serper);
     assert_eq!(config.format, OutputFormat::Json);
     assert_eq!(config.color, ColorWhen::Never);
     assert_eq!(config.timeout, Duration::from_secs(3));
     assert_eq!(config.searxng.url.as_str(), "https://search.example.org/");
     assert!(config.searxng.embedded);
+    assert_eq!(
+        config.serper.url.as_str(),
+        "https://serper-proxy.example.org/"
+    );
 }
 
 #[test]
@@ -96,6 +108,29 @@ fn an_instance_url_without_a_scheme_is_an_error() {
     let message = error("[searxng]\nurl = 'localhost:8888'");
 
     assert!(message.contains("http or https"), "{message}");
+}
+
+#[test]
+fn a_serper_url_must_be_http_and_gains_a_trailing_slash() {
+    let message = error("[serper]\nurl = 'proxy.internal:8080'");
+    assert!(
+        message.contains("serper.url must be an http or https URL"),
+        "{message}"
+    );
+
+    let url = parse("[serper]\nurl = 'https://proxy.example.org/serper'")
+        .serper
+        .url;
+    assert_eq!(url.as_str(), "https://proxy.example.org/serper/");
+}
+
+#[test]
+fn a_provider_that_cannot_search_yet_is_refused() {
+    let message = error("provider = 'duckduckgo'");
+    assert!(
+        message.contains("unknown variant `duckduckgo`"),
+        "{message}"
+    );
 }
 
 #[test]

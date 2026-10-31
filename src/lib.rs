@@ -9,12 +9,14 @@ use std::num::NonZeroU32;
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
+    /// Not searchable yet, so no config file can choose it.
+    #[serde(skip_deserializing)]
     DuckDuckGo,
     SearXNG,
     Serper,

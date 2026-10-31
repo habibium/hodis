@@ -13,8 +13,10 @@ use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
 use url::Url;
 
+use crate::Provider;
 use crate::output::{ColorWhen, OutputFormat};
 use crate::providers::searxng::SEARXNG_BASE_URL;
+use crate::providers::serper::SERPER_BASE_URL;
 
 /// Environment variable naming a config file to read instead of the default.
 pub const CONFIG_ENV: &str = "HODIS_CONFIG";
@@ -24,11 +26,14 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Settings in effect.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
+    /// The provider searches go to.
+    pub provider: Provider,
     pub format: OutputFormat,
     pub color: ColorWhen,
     /// Time allowed for each search request.
     pub timeout: Duration,
     pub searxng: SearXNG,
+    pub serper: Serper,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +44,13 @@ pub struct SearXNG {
     /// Whether hodis may install and run its own instance when nothing answers
     /// at `url`. On unless the config file sets `url`.
     pub embedded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Serper {
+    /// The API's address, which only a proxy in front of Serper changes. Ends
+    /// in `/`, like [`SearXNG::url`].
+    pub url: Url,
 }
 
 /// Settings as read, along with what hodis ignored in them.
@@ -53,17 +65,25 @@ pub struct Loaded {
 
 #[derive(Deserialize)]
 struct Document {
+    provider: Option<Provider>,
     format: Option<OutputFormat>,
     color: Option<ColorWhen>,
     timeout: Option<NonZeroU64>,
     #[serde(default)]
     searxng: SearXNGTable,
+    #[serde(default)]
+    serper: SerperTable,
 }
 
 #[derive(Default, Deserialize)]
 struct SearXNGTable {
     url: Option<Url>,
     embedded: Option<bool>,
+}
+
+#[derive(Default, Deserialize)]
+struct SerperTable {
+    url: Option<Url>,
 }
 
 /// The config file hodis reads: the one `HODIS_CONFIG` names, else
@@ -126,11 +146,16 @@ impl Config {
 
         let url_set = document.searxng.url.is_some();
         let url = match document.searxng.url {
-            Some(url) => instance_url(url)?,
+            Some(url) => base_url("searxng.url", url)?,
             None => Url::parse(SEARXNG_BASE_URL)?,
+        };
+        let serper_url = match document.serper.url {
+            Some(url) => base_url("serper.url", url)?,
+            None => Url::parse(SERPER_BASE_URL)?,
         };
 
         let config = Self {
+            provider: document.provider.unwrap_or(Provider::SearXNG),
             format: document.format.unwrap_or(OutputFormat::Pretty),
             color: document.color.unwrap_or(ColorWhen::Auto),
             timeout: document
@@ -140,6 +165,7 @@ impl Config {
                 url,
                 embedded: document.searxng.embedded.unwrap_or(!url_set),
             },
+            serper: Serper { url: serper_url },
         };
         Ok(Loaded {
             config,
@@ -151,10 +177,10 @@ impl Config {
 
 /// `localhost:8888` parses as a URL with `localhost` as its scheme, so the
 /// scheme is checked rather than trusted.
-fn instance_url(mut url: Url) -> Result<Url> {
+fn base_url(key: &str, mut url: Url) -> Result<Url> {
     ensure!(
         matches!(url.scheme(), "http" | "https"),
-        "searxng.url must be an http or https URL, not {url}"
+        "{key} must be an http or https URL, not {url}"
     );
     if !url.path().ends_with('/') {
         let path = format!("{}/", url.path());
