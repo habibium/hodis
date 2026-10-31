@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use etcetera::{BaseStrategy, choose_base_strategy};
 
 /// Environment variable that overrides the data directory.
 pub const DATA_DIR_ENV: &str = "HODIS_DATA_DIR";
@@ -29,8 +30,8 @@ impl Paths {
         if let Some(dir) = std::env::var_os(DATA_DIR_ENV) {
             return Ok(Self::new(PathBuf::from(dir)));
         }
-        let base = dirs::data_dir().context("no data directory for the current user")?;
-        Ok(Self::new(base.join("hodis")))
+        let base = choose_base_strategy().context("no data directory for the current user")?;
+        Ok(Self::new(base.data_dir().join("hodis")))
     }
 
     #[must_use]
