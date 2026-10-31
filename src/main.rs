@@ -4,14 +4,13 @@ use anstream::{AutoStream, ColorChoice};
 use anyhow::Result;
 use clap::Parser;
 use reqwest::Client;
-use url::Url;
 
 use hodis::{
     SearchParams, SearchProvider,
     config::{Config, Loaded},
     engine::{Engine, is_reachable},
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
+    providers::searxng::SearXNGProvider,
 };
 
 #[derive(Parser)]
@@ -54,11 +53,11 @@ async fn main() -> Result<()> {
         }
     }
 
-    // The default instance is one the user may or may not be running; when
-    // nothing answers there, fall back to the engine hodis manages itself.
-    let default_url = Url::parse(SEARXNG_BASE_URL)?;
-    let base_url = if is_reachable(&client, &default_url).await {
-        default_url
+    // The instance is one the user may or may not be running; when nothing
+    // answers there, fall back to the engine hodis manages itself, if allowed.
+    let instance = config.searxng;
+    let base_url = if !instance.embedded || is_reachable(&client, &instance.url).await {
+        instance.url
     } else {
         Engine::resolve()?.ensure_running(&client, &mut err).await?
     };

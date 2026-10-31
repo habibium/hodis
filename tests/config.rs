@@ -25,6 +25,8 @@ fn an_empty_file_keeps_every_default() {
     assert_eq!(config.format, OutputFormat::Pretty);
     assert_eq!(config.color, ColorWhen::Auto);
     assert_eq!(config.timeout, Duration::from_secs(10));
+    assert_eq!(config.searxng.url.as_str(), "http://localhost:8888/");
+    assert!(config.searxng.embedded);
     assert_eq!(loaded.unknown_keys, Vec::<String>::new());
 }
 
@@ -35,12 +37,18 @@ fn every_setting_is_read() {
         format = "json"
         color = "never"
         timeout = 3
+
+        [searxng]
+        url = "https://search.example.org/"
+        embedded = true
         "#,
     );
 
     assert_eq!(config.format, OutputFormat::Json);
     assert_eq!(config.color, ColorWhen::Never);
     assert_eq!(config.timeout, Duration::from_secs(3));
+    assert_eq!(config.searxng.url.as_str(), "https://search.example.org/");
+    assert!(config.searxng.embedded);
 }
 
 #[test]
@@ -61,10 +69,10 @@ fn values_are_spelled_as_on_the_command_line() {
 
 #[test]
 fn unknown_keys_are_reported_and_otherwise_ignored() {
-    let loaded =
-        Config::parse("fromat = 'json'\ntimout = 3\n").expect("unknown keys are not fatal");
+    let loaded = Config::parse("fromat = 'json'\n\n[searxng]\nurll = 'https://example.org/'\n")
+        .expect("unknown keys are not fatal");
 
-    assert_eq!(loaded.unknown_keys, ["fromat", "timout"]);
+    assert_eq!(loaded.unknown_keys, ["fromat", "searxng.urll"]);
     assert_eq!(loaded.config, parse(""));
 }
 
@@ -81,6 +89,35 @@ fn a_zero_timeout_is_an_error() {
     let message = error("timeout = 0");
 
     assert!(message.contains("nonzero"), "{message}");
+}
+
+#[test]
+fn an_instance_url_without_a_scheme_is_an_error() {
+    let message = error("[searxng]\nurl = 'localhost:8888'");
+
+    assert!(message.contains("http or https"), "{message}");
+}
+
+#[test]
+fn an_instance_url_gains_the_trailing_slash_endpoints_join_onto() {
+    let url = parse("[searxng]\nurl = 'https://example.org/searxng'")
+        .searxng
+        .url;
+
+    assert_eq!(url.as_str(), "https://example.org/searxng/");
+    assert_eq!(
+        url.join("search").expect("a relative path joins").as_str(),
+        "https://example.org/searxng/search"
+    );
+}
+
+#[test]
+fn setting_an_instance_url_turns_the_embedded_fallback_off_unless_asked() {
+    let url = "[searxng]\nurl = 'https://example.org/'\n";
+
+    assert!(!parse(url).searxng.embedded);
+    assert!(parse(&format!("{url}embedded = true")).searxng.embedded);
+    assert!(!parse("[searxng]\nembedded = false").searxng.embedded);
 }
 
 #[test]

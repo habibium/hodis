@@ -8,11 +8,13 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
+use url::Url;
 
 use crate::output::{ColorWhen, OutputFormat};
+use crate::providers::searxng::SEARXNG_BASE_URL;
 
 /// Environment variable naming a config file to read instead of the default.
 pub const CONFIG_ENV: &str = "HODIS_CONFIG";
@@ -26,6 +28,17 @@ pub struct Config {
     pub color: ColorWhen,
     /// Time allowed for each search request.
     pub timeout: Duration,
+    pub searxng: SearXNG,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearXNG {
+    /// Ends in `/`: endpoints are joined onto it, and a join replaces whatever
+    /// follows the last slash.
+    pub url: Url,
+    /// Whether hodis may install and run its own instance when nothing answers
+    /// at `url`. On unless the config file sets `url`.
+    pub embedded: bool,
 }
 
 /// Settings as read, along with what hodis ignored in them.
@@ -43,6 +56,14 @@ struct Document {
     format: Option<OutputFormat>,
     color: Option<ColorWhen>,
     timeout: Option<NonZeroU64>,
+    #[serde(default)]
+    searxng: SearXNGTable,
+}
+
+#[derive(Default, Deserialize)]
+struct SearXNGTable {
+    url: Option<Url>,
+    embedded: Option<bool>,
 }
 
 /// The config file hodis reads: the one `HODIS_CONFIG` names, else
@@ -103,12 +124,22 @@ impl Config {
                 unknown_keys.push(key.to_string());
             })?;
 
+        let url_set = document.searxng.url.is_some();
+        let url = match document.searxng.url {
+            Some(url) => instance_url(url)?,
+            None => Url::parse(SEARXNG_BASE_URL)?,
+        };
+
         let config = Self {
             format: document.format.unwrap_or(OutputFormat::Pretty),
             color: document.color.unwrap_or(ColorWhen::Auto),
             timeout: document
                 .timeout
                 .map_or(DEFAULT_TIMEOUT, |secs| Duration::from_secs(secs.get())),
+            searxng: SearXNG {
+                url,
+                embedded: document.searxng.embedded.unwrap_or(!url_set),
+            },
         };
         Ok(Loaded {
             config,
@@ -116,4 +147,18 @@ impl Config {
             unknown_keys,
         })
     }
+}
+
+/// `localhost:8888` parses as a URL with `localhost` as its scheme, so the
+/// scheme is checked rather than trusted.
+fn instance_url(mut url: Url) -> Result<Url> {
+    ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "searxng.url must be an http or https URL, not {url}"
+    );
+    if !url.path().ends_with('/') {
+        let path = format!("{}/", url.path());
+        url.set_path(&path);
+    }
+    Ok(url)
 }
