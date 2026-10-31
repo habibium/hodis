@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use anstream::ColorChoice;
 use anstyle::{AnsiColor, Color, Style};
 use clap::ValueEnum;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{Diagnostics, SearchResponse};
 
@@ -33,7 +33,8 @@ const SETUP: Style = Style::new()
     .fg_color(Some(Color::Ansi(AnsiColor::Green)));
 const SETUP_TEXT: Style = Style::new().dimmed();
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     /// Styled text for reading in a terminal
     Pretty,
@@ -47,7 +48,8 @@ pub enum OutputFormat {
     Urls,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ColorWhen {
     Auto,
     Always,
