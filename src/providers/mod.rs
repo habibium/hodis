@@ -28,7 +28,8 @@ pub async fn connect(
         }),
         Provider::Serper => Box::new(SerperProvider {
             base_url: config.serper.url.clone(),
-            key: keys::find(KeyedProvider::Serper)?,
+            // The keychain may wait on an unlock prompt, which must not stall the runtime.
+            key: tokio::task::spawn_blocking(|| keys::find(KeyedProvider::Serper)).await??,
         }),
         Provider::DuckDuckGo => bail!("hodis cannot search DuckDuckGo yet"),
     })

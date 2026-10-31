@@ -1,6 +1,7 @@
 pub mod config;
 pub mod engine;
 pub mod keys;
+pub mod mcp;
 pub mod output;
 pub mod providers;
 
@@ -90,6 +91,6 @@ pub struct SearchParams {
 }
 
 #[async_trait]
-pub trait SearchProvider {
+pub trait SearchProvider: Send + Sync {
     async fn search(&self, client: &Client, params: &SearchParams) -> Result<SearchResponse>;
 }

@@ -12,6 +12,7 @@ use hodis::{
     Provider, SearchParams,
     config::{self, Config, Loaded},
     keys::{ApiKey, Keychain, KeyedProvider},
+    mcp,
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
     providers,
 };
@@ -54,6 +55,16 @@ enum Command {
     /// Store or delete the API keys of providers that need one
     #[command(subcommand)]
     Key(KeyCommand),
+    /// Serve web searches to AI agents over MCP
+    ///
+    /// An MCP client, such as an AI coding agent, starts this command and talks
+    /// to it over standard input and output. Searches go to the provider the
+    /// config file chooses unless `--provider` names another.
+    Mcp {
+        /// Search provider (default: searxng)
+        #[arg(long, value_enum)]
+        provider: Option<Provider>,
+    },
 }
 
 #[derive(Clone, Copy, Subcommand)]
@@ -96,6 +107,18 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Key(command)) => manage_key(command, &mut err),
+        Some(Command::Mcp { provider }) => {
+            if io::stdin().is_terminal() {
+                render_warning(
+                    "`hodis mcp` is for an MCP client to start; it waits for the client's messages on standard input",
+                    &mut err,
+                )?;
+            }
+            // Its lock on stderr would hold up any other thread writing there.
+            drop(err);
+            let provider = provider.unwrap_or(config.provider);
+            mcp::Server::new(config, provider)?.serve_stdio().await
+        }
         None => search(cli.search, config, &mut err).await,
     }
 }
@@ -233,6 +256,20 @@ mod tests {
         let cli = parse(&["rust", "key", "set"]);
         assert!(cli.command.is_none());
         assert_eq!(cli.search.query, ["rust", "key", "set"]);
+    }
+
+    #[test]
+    fn mcp_takes_a_provider_of_its_own() {
+        assert!(matches!(
+            parse(&["mcp"]).command,
+            Some(Command::Mcp { provider: None })
+        ));
+        assert!(matches!(
+            parse(&["mcp", "--provider", "serper"]).command,
+            Some(Command::Mcp {
+                provider: Some(Provider::Serper)
+            })
+        ));
     }
 
     #[test]
