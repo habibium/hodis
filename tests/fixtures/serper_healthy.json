@@ -1,0 +1,74 @@
+{
+  "searchParameters": {
+    "q": "capital of norway",
+    "gl": "us",
+    "hl": "en",
+    "type": "search",
+    "engine": "google"
+  },
+  "answerBox": {
+    "title": "Norway / Capital",
+    "answer": "Oslo"
+  },
+  "knowledgeGraph": {
+    "title": "Oslo",
+    "type": "Capital of Norway",
+    "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:oslo",
+    "description": "Oslo is the capital and most populous city of Norway.",
+    "descriptionSource": "Wikipedia",
+    "descriptionLink": "https://en.wikipedia.org/wiki/Oslo",
+    "attributes": {
+      "Population": "717,710 (2024)",
+      "Area": "454 km²"
+    }
+  },
+  "organic": [
+    {
+      "title": "Oslo - Wikipedia",
+      "link": "https://en.wikipedia.org/wiki/Oslo",
+      "snippet": "Oslo is the capital and most populous city of Norway. It constitutes both a county and a municipality.",
+      "sitelinks": [
+        {
+          "title": "History",
+          "link": "https://en.wikipedia.org/wiki/History_of_Oslo"
+        },
+        {
+          "title": "Boroughs",
+          "link": "https://en.wikipedia.org/wiki/List_of_boroughs_of_Oslo"
+        }
+      ],
+      "position": 1
+    },
+    {
+      "title": "Visit Oslo - The official travel guide to Oslo",
+      "link": "https://www.visitoslo.com/en/",
+      "snippet": "Find things to do, places to stay and events in Oslo.",
+      "position": 2
+    },
+    {
+      "title": "Oslo | History, Population, & Facts | Britannica",
+      "link": "https://www.britannica.com/place/Oslo",
+      "snippet": "Oslo, capital of Norway, located at the head of Oslo Fjord in the southeastern part of the country.",
+      "date": "Sep 3, 2025",
+      "imageUrl": "https://cdn.britannica.com/oslo-harbour.jpg",
+      "position": 3
+    }
+  ],
+  "peopleAlsoAsk": [
+    {
+      "question": "Was Bergen ever the capital of Norway?",
+      "snippet": "Bergen was the capital of Norway in the 13th century.",
+      "title": "Bergen - Wikipedia",
+      "link": "https://en.wikipedia.org/wiki/Bergen"
+    }
+  ],
+  "relatedSearches": [
+    {
+      "query": "capital of sweden"
+    },
+    {
+      "query": "oslo population"
+    }
+  ],
+  "credits": 1
+}

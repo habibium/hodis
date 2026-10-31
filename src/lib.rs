@@ -8,15 +8,23 @@ use std::num::NonZeroU32;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use clap::ValueEnum;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
+    /// Not searchable yet, so neither a flag nor a config file can choose it.
+    #[serde(skip_deserializing)]
+    #[value(skip)]
     DuckDuckGo,
+    /// A SearXNG instance: yours, or one hodis runs itself
+    #[value(name = "searxng")]
     SearXNG,
+    /// Google results through serper.dev, with an API key
+    Serper,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

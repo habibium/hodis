@@ -91,6 +91,7 @@ fn provider_names_serialize_lowercase() -> anyhow::Result<()> {
         json!("duckduckgo")
     );
     assert_eq!(serde_json::to_value(Provider::SearXNG)?, json!("searxng"));
+    assert_eq!(serde_json::to_value(Provider::Serper)?, json!("serper"));
     Ok(())
 }
 

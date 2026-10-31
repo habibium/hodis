@@ -4,17 +4,18 @@ use std::{
 };
 
 use anstream::{AutoStream, ColorChoice};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use reqwest::Client;
+use url::Url;
 
 use hodis::{
-    SearchParams, SearchProvider,
-    config::{self, Config, Loaded},
+    Provider, SearchParams, SearchProvider,
+    config::{self, Config, Loaded, SearXNG},
     engine::{Engine, is_reachable},
-    keys::{ApiKey, Keychain, KeyedProvider},
+    keys::{self, ApiKey, Keychain, KeyedProvider},
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers::searxng::SearXNGProvider,
+    providers::{searxng::SearXNGProvider, serper::SerperProvider},
 };
 
 #[derive(Parser)]
@@ -39,6 +40,9 @@ struct Search {
     /// Result page number (starts at 1)
     #[arg(short, long, value_name = "NUMBER")]
     page: Option<NonZeroU32>,
+    /// Search provider (default: searxng)
+    #[arg(long, value_enum)]
+    provider: Option<Provider>,
     /// Output format (default: pretty)
     #[arg(short, long, value_enum)]
     format: Option<OutputFormat>,
@@ -103,22 +107,22 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     let client = Client::builder().timeout(config.timeout).build()?;
     let mut out = AutoStream::auto(io::stdout().lock());
 
-    // The instance is one the user may or may not be running; when nothing
-    // answers there, fall back to the engine hodis manages itself, if allowed.
-    let instance = config.searxng;
-    let base_url = if !instance.embedded || is_reachable(&client, &instance.url).await {
-        instance.url
-    } else {
-        Engine::resolve()?.ensure_running(&client, err).await?
+    let provider: Box<dyn SearchProvider> = match args.provider.unwrap_or(config.provider) {
+        Provider::SearXNG => Box::new(SearXNGProvider {
+            base_url: searxng_url(&client, config.searxng, err).await?,
+        }),
+        Provider::Serper => Box::new(SerperProvider {
+            base_url: config.serper.url,
+            key: keys::find(KeyedProvider::Serper)?,
+        }),
+        Provider::DuckDuckGo => bail!("hodis cannot search DuckDuckGo yet"),
     };
-
-    let searxng = SearXNGProvider { base_url };
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
     };
 
-    let response = searxng.search(&client, &params).await?;
+    let response = provider.search(&client, &params).await?;
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends
@@ -129,6 +133,17 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
+}
+
+/// The configured instance is one the user may or may not be running; when
+/// nothing answers there, hodis falls back to the engine it runs itself, if
+/// allowed.
+async fn searxng_url(client: &Client, instance: SearXNG, progress: &mut impl Write) -> Result<Url> {
+    if !instance.embedded || is_reachable(client, &instance.url).await {
+        Ok(instance.url)
+    } else {
+        Engine::resolve()?.ensure_running(client, progress).await
+    }
 }
 
 fn manage_key(command: KeyCommand, err: &mut impl Write) -> Result<()> {
@@ -204,6 +219,8 @@ fn parse_args() -> Cli {
 mod tests {
     use clap::{CommandFactory, Parser};
 
+    use hodis::Provider;
+
     use super::{Cli, Command, KeyCommand, KeyedProvider};
 
     fn parse(args: &[&str]) -> Cli {
@@ -244,6 +261,15 @@ mod tests {
         let cli = parse(&["--", "key"]);
         assert!(cli.command.is_none());
         assert_eq!(cli.search.query, ["key"]);
+    }
+
+    #[test]
+    fn a_provider_that_cannot_search_yet_is_not_offered() {
+        assert_eq!(
+            parse(&["--provider", "serper", "rust"]).search.provider,
+            Some(Provider::Serper)
+        );
+        assert!(Cli::try_parse_from(["hodis", "--provider", "duckduckgo", "rust"]).is_err());
     }
 
     #[test]
