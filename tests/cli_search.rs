@@ -1,16 +1,35 @@
 //! The binary end to end, searching a mock SearXNG instance that a scratch
 //! config file names, so nothing reaches the network.
+//!
+//! Tests are multi-threaded because they block on the child process while the
+//! mock serves it.
 
 use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use wiremock::matchers::{method, path};
+use tempfile::TempDir;
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const HEALTHY_BODY: &str = include_str!("fixtures/healthy.json");
 
-// Multi-threaded, because the test blocks on the child while the mock serves it.
+/// A config file in `dir` naming `server` as the SearXNG instance.
+fn config_for(server: &MockServer, dir: &TempDir) -> anyhow::Result<PathBuf> {
+    let config = dir.path().join("config.toml");
+    fs::write(&config, format!("[searxng]\nurl = \"{}\"\n", server.uri()))?;
+    Ok(config)
+}
+
+fn hodis(server: &MockServer, dir: &TempDir) -> anyhow::Result<Command> {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_hodis"));
+    command
+        .env("HODIS_CONFIG", config_for(server, dir)?)
+        .env(hodis::engine::DATA_DIR_ENV, dir.path());
+    Ok(command)
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_reader_that_stops_early_ends_the_output_quietly() -> anyhow::Result<()> {
     let server = MockServer::start().await;
@@ -25,12 +44,8 @@ async fn a_reader_that_stops_early_ends_the_output_quietly() -> anyhow::Result<(
         .mount(&server)
         .await;
     let dir = tempfile::tempdir()?;
-    let config = dir.path().join("config.toml");
-    fs::write(&config, format!("[searxng]\nurl = \"{}\"\n", server.uri()))?;
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hodis"))
-        .env("HODIS_CONFIG", &config)
-        .env(hodis::engine::DATA_DIR_ENV, dir.path())
+    let mut child = hodis(&server, &dir)?
         .args(["--format", "urls", "rust"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -40,5 +55,27 @@ async fn a_reader_that_stops_early_ends_the_output_quietly() -> anyhow::Result<(
 
     assert_eq!(String::from_utf8_lossy(&output.stderr), "");
     assert!(output.status.success(), "{}", output.status);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_double_dash_searches_for_a_command_name() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .and(query_param("q", "key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(HEALTHY_BODY))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir()?;
+
+    let output = hodis(&server, &dir)?.args(["--", "key"]).output()?;
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     Ok(())
 }
