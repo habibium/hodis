@@ -2,6 +2,7 @@ mod markdown;
 
 use std::io::{self, Write};
 
+use anstream::ColorChoice;
 use anstyle::{AnsiColor, Color, Style};
 use clap::ValueEnum;
 use serde::Serialize;
@@ -44,6 +45,23 @@ pub enum OutputFormat {
     Plain,
     /// Result URLs, one per line
     Urls,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ColorWhen {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorWhen> for ColorChoice {
+    fn from(when: ColorWhen) -> Self {
+        match when {
+            ColorWhen::Auto => Self::Auto,
+            ColorWhen::Always => Self::Always,
+            ColorWhen::Never => Self::Never,
+        }
+    }
 }
 
 #[derive(Serialize)]

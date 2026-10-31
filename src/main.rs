@@ -2,14 +2,14 @@ use std::{io, num::NonZeroU32, time::Duration};
 
 use anstream::{AutoStream, ColorChoice};
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use reqwest::Client;
 use url::Url;
 
 use hodis::{
     SearchParams, SearchProvider,
     engine::{Engine, is_reachable},
-    output::{OutputFormat, render, render_diagnostics},
+    output::{ColorWhen, OutputFormat, render, render_diagnostics},
     providers::searxng::{SEARXNG_BASE_URL, SearXNGProvider},
 };
 
@@ -28,23 +28,6 @@ struct Cli {
     /// When to use colors
     #[arg(long, value_name = "WHEN", value_enum, default_value_t = ColorWhen::Auto)]
     color: ColorWhen,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-enum ColorWhen {
-    Auto,
-    Always,
-    Never,
-}
-
-impl From<ColorWhen> for ColorChoice {
-    fn from(when: ColorWhen) -> Self {
-        match when {
-            ColorWhen::Auto => Self::Auto,
-            ColorWhen::Always => Self::Always,
-            ColorWhen::Never => Self::Never,
-        }
-    }
 }
 
 #[tokio::main(flavor = "current_thread")]
