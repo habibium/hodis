@@ -429,6 +429,7 @@ fn extract(archive: &Path, into: &Path) -> Result<()> {
         .arg("-C")
         .arg(into)
         .stdin(Stdio::null())
+        .stdout(io::stderr())
         .status()
         .with_context(|| format!("cannot run tar to unpack {}", archive.display()))?;
     ensure!(
