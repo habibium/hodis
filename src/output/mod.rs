@@ -173,39 +173,44 @@ pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> 
 }
 
 pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io::Result<()> {
-    if diagnostics.failed_providers.is_empty()
-        && diagnostics.skipped_results == 0
-        && diagnostics.unresponsive_engines.is_empty()
-    {
+    let warnings = warnings(diagnostics);
+    if warnings.is_empty() {
         return Ok(());
     }
-
     writeln!(out)?;
-
-    for issue in &diagnostics.failed_providers {
-        writeln!(
-            out,
-            "{WARN}warning:{WARN:#} {DIAG_TEXT}cannot search {}: {}{DIAG_TEXT:#}",
-            issue.provider.name(),
-            one_line(&issue.reason)
-        )?;
+    for warning in warnings {
+        render_warning(&warning, out)?;
     }
+    Ok(())
+}
+
+/// What went wrong without stopping a search, one sentence per problem.
+pub(crate) fn warnings(diagnostics: &Diagnostics) -> Vec<String> {
+    let mut warnings: Vec<String> = diagnostics
+        .failed_providers
+        .iter()
+        .map(|issue| {
+            format!(
+                "cannot search {}: {}",
+                issue.provider.name(),
+                one_line(&issue.reason)
+            )
+        })
+        .collect();
 
     if !diagnostics.unresponsive_engines.is_empty() {
-        write!(
-            out,
-            "{WARN}warning:{WARN:#} {DIAG_TEXT}unresponsive engines:{DIAG_TEXT:#}"
-        )?;
-        for (i, engine) in (1..).zip(&diagnostics.unresponsive_engines) {
-            let sep = if i > 1 { "," } else { "" };
-            write!(
-                out,
-                "{DIAG_TEXT}{sep} {} ({}){DIAG_TEXT:#}",
-                one_line(&engine.engine),
-                one_line(&engine.reason)
-            )?;
-        }
-        writeln!(out)?;
+        let engines: Vec<String> = diagnostics
+            .unresponsive_engines
+            .iter()
+            .map(|engine| {
+                format!(
+                    "{} ({})",
+                    one_line(&engine.engine),
+                    one_line(&engine.reason)
+                )
+            })
+            .collect();
+        warnings.push(format!("unresponsive engines: {}", engines.join(", ")));
     }
 
     if diagnostics.skipped_results > 0 {
@@ -214,14 +219,13 @@ pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io
         } else {
             ""
         };
-        writeln!(
-            out,
-            "{WARN}warning:{WARN:#} {DIAG_TEXT}skipped {} malformed result{s}{DIAG_TEXT:#}",
+        warnings.push(format!(
+            "skipped {} malformed result{s}",
             diagnostics.skipped_results
-        )?;
+        ));
     }
 
-    Ok(())
+    warnings
 }
 
 pub fn render_warning(message: &str, out: &mut impl Write) -> io::Result<()> {
@@ -233,7 +237,7 @@ pub fn render_warning(message: &str, out: &mut impl Write) -> io::Result<()> {
 
 /// Provider text as a single line. Control characters are dropped because a
 /// terminal acts on them, e.g. on escape sequences planted in a page title.
-fn one_line(text: &str) -> String {
+pub(crate) fn one_line(text: &str) -> String {
     text.split_whitespace()
         .map(|word| word.chars().filter(|c| !c.is_control()).collect::<String>())
         .filter(|word| !word.is_empty())
