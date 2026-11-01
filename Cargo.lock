@@ -1122,6 +1122,7 @@ dependencies = [
  "async-trait",
  "clap",
  "etcetera",
+ "futures",
  "getrandom 0.4.3",
  "insta",
  "jsonschema",

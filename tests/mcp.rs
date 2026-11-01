@@ -28,7 +28,7 @@ type Client = RunningService<RoleClient, ()>;
 /// A client of a server whose searches go to `searxng`.
 async fn client_for(searxng: &MockServer) -> anyhow::Result<Client> {
     let config = Config::parse(&format!("[searxng]\nurl = \"{}\"\n", searxng.uri()))?.config;
-    let server = Server::new(config, Provider::SearXNG)?;
+    let server = Server::new(config, vec![Provider::SearXNG])?;
     let (server_end, client_end) = tokio::io::duplex(1 << 16);
     tokio::spawn(async move {
         server.serve(server_end).await?.waiting().await?;

@@ -26,7 +26,7 @@ use crate::{Provider, SearchParams, SearchResponse, providers};
 #[derive(Debug)]
 pub struct Server {
     config: Config,
-    provider: Provider,
+    providers: Vec<Provider>,
     client: Client,
 }
 
@@ -43,12 +43,12 @@ struct WebSearch {
 }
 
 impl Server {
-    /// A server searching `provider`, set up as `config` says.
-    pub fn new(config: Config, provider: Provider) -> Result<Self> {
-        let client = Client::builder().timeout(config.timeout).build()?;
+    /// A server searching `providers`, set up as `config` says.
+    pub fn new(config: Config, providers: Vec<Provider>) -> Result<Self> {
+        let client = Client::builder().build()?;
         Ok(Self {
             config,
-            provider,
+            providers,
             client,
         })
     }
@@ -67,9 +67,14 @@ impl Server {
 
     async fn search(&self, params: &SearchParams) -> Result<SearchResponse> {
         let mut progress = AutoStream::auto(io::stderr());
-        let provider =
-            providers::connect(self.provider, &self.config, &self.client, &mut progress).await?;
-        provider.search(&self.client, params).await
+        providers::search(
+            &self.providers,
+            params,
+            &self.config,
+            &self.client,
+            &mut progress,
+        )
+        .await
     }
 }
 

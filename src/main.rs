@@ -39,9 +39,10 @@ struct Search {
     /// Result page number (starts at 1)
     #[arg(short, long, value_name = "NUMBER")]
     page: Option<NonZeroU32>,
-    /// Search provider (default: searxng)
-    #[arg(long, value_enum)]
-    provider: Option<Provider>,
+    /// Search providers, comma-separated; several are searched at once
+    /// (default: searxng)
+    #[arg(long, value_enum, value_delimiter = ',', value_name = "PROVIDER")]
+    provider: Vec<Provider>,
     /// Output format (default: pretty)
     #[arg(short, long, value_enum)]
     format: Option<OutputFormat>,
@@ -58,12 +59,13 @@ enum Command {
     /// Serve web searches to AI agents over MCP
     ///
     /// An MCP client, such as an AI coding agent, starts this command and talks
-    /// to it over standard input and output. Searches go to the provider the
-    /// config file chooses unless `--provider` names another.
+    /// to it over standard input and output. Searches go to the providers the
+    /// config file chooses unless `--provider` names others.
     Mcp {
-        /// Search provider (default: searxng)
-        #[arg(long, value_enum)]
-        provider: Option<Provider>,
+        /// Search providers, comma-separated; several are searched at once
+        /// (default: searxng)
+        #[arg(long, value_enum, value_delimiter = ',', value_name = "PROVIDER")]
+        provider: Vec<Provider>,
     },
 }
 
@@ -116,8 +118,12 @@ async fn main() -> Result<()> {
             }
             // Its lock on stderr would hold up any other thread writing there.
             drop(err);
-            let provider = provider.unwrap_or(config.provider);
-            mcp::Server::new(config, provider)?.serve_stdio().await
+            let providers = if provider.is_empty() {
+                config.providers.clone()
+            } else {
+                provider
+            };
+            mcp::Server::new(config, providers)?.serve_stdio().await
         }
         None => search(cli.search, config, &mut err).await,
     }
@@ -125,17 +131,20 @@ async fn main() -> Result<()> {
 
 async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
     let format = args.format.unwrap_or(config.format);
-    let client = Client::builder().timeout(config.timeout).build()?;
+    let client = Client::builder().build()?;
     let mut out = AutoStream::auto(io::stdout().lock());
 
-    let provider = args.provider.unwrap_or(config.provider);
-    let provider = providers::connect(provider, &config, &client, err).await?;
+    let providers = if args.provider.is_empty() {
+        &config.providers
+    } else {
+        &args.provider
+    };
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
     };
 
-    let response = provider.search(&client, &params).await?;
+    let response = providers::search(providers, &params, &config, &client, err).await?;
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends
@@ -259,16 +268,15 @@ mod tests {
     }
 
     #[test]
-    fn mcp_takes_a_provider_of_its_own() {
+    fn mcp_takes_providers_of_its_own() {
         assert!(matches!(
             parse(&["mcp"]).command,
-            Some(Command::Mcp { provider: None })
+            Some(Command::Mcp { provider }) if provider.is_empty()
         ));
         assert!(matches!(
-            parse(&["mcp", "--provider", "serper"]).command,
-            Some(Command::Mcp {
-                provider: Some(Provider::Serper)
-            })
+            parse(&["mcp", "--provider", "serper,searxng"]).command,
+            Some(Command::Mcp { provider })
+                if provider == [Provider::Serper, Provider::SearXNG]
         ));
     }
 
@@ -283,9 +291,26 @@ mod tests {
     fn a_provider_that_cannot_search_yet_is_not_offered() {
         assert_eq!(
             parse(&["--provider", "serper", "rust"]).search.provider,
-            Some(Provider::Serper)
+            [Provider::Serper]
         );
         assert!(Cli::try_parse_from(["hodis", "--provider", "duckduckgo", "rust"]).is_err());
+    }
+
+    #[test]
+    fn several_providers_are_named_with_commas_or_repeated_flags() {
+        let both = [Provider::SearXNG, Provider::Serper];
+        assert_eq!(
+            parse(&["--provider", "searxng,serper", "rust"])
+                .search
+                .provider,
+            both
+        );
+        assert_eq!(
+            parse(&["--provider", "searxng", "--provider", "serper", "rust"])
+                .search
+                .provider,
+            both
+        );
     }
 
     #[test]

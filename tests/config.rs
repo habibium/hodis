@@ -23,7 +23,7 @@ fn an_empty_file_keeps_every_default() {
     let loaded = Config::parse("").expect("an empty file is valid");
 
     let config = loaded.config;
-    assert_eq!(config.provider, Provider::SearXNG);
+    assert_eq!(config.providers, [Provider::SearXNG]);
     assert_eq!(config.format, OutputFormat::Pretty);
     assert_eq!(config.color, ColorWhen::Auto);
     assert_eq!(config.timeout, Duration::from_secs(10));
@@ -51,7 +51,7 @@ fn every_setting_is_read() {
         "#,
     );
 
-    assert_eq!(config.provider, Provider::Serper);
+    assert_eq!(config.providers, [Provider::Serper]);
     assert_eq!(config.format, OutputFormat::Json);
     assert_eq!(config.color, ColorWhen::Never);
     assert_eq!(config.timeout, Duration::from_secs(3));
@@ -75,7 +75,7 @@ fn values_are_spelled_as_on_the_command_line() {
             .to_possible_value()
             .expect("only offered providers are listed");
         let name = flag.get_name();
-        assert_eq!(parse(&format!("provider = '{name}'")).provider, provider);
+        assert_eq!(parse(&format!("provider = '{name}'")).providers, [provider]);
     }
     for &color in ColorWhen::value_variants() {
         let flag = color
@@ -129,6 +129,29 @@ fn a_serper_url_must_be_http_and_gains_a_trailing_slash() {
         .serper
         .url;
     assert_eq!(url.as_str(), "https://proxy.example.org/serper/");
+}
+
+#[test]
+fn a_list_of_providers_keeps_its_order() {
+    assert_eq!(
+        parse("provider = ['serper', 'searxng']").providers,
+        [Provider::Serper, Provider::SearXNG]
+    );
+}
+
+#[test]
+fn an_empty_list_of_providers_is_refused() {
+    let message = error("provider = []");
+    assert!(
+        message.contains("provider must name at least one provider"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_misspelt_provider_in_a_list_is_named() {
+    let message = error("provider = ['searxng', 'serpr']");
+    assert!(message.contains("unknown variant `serpr`"), "{message}");
 }
 
 #[test]

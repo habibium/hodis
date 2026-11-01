@@ -2,6 +2,7 @@
 //! it leaves out. Command-line flags take precedence over both.
 
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
 use std::num::NonZeroU64;
@@ -11,6 +12,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, ensure};
 use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
+use serde::de::value::SeqAccessDeserializer;
+use serde::de::{self, Deserializer, IntoDeserializer, SeqAccess, Visitor};
 use url::Url;
 
 use crate::Provider;
@@ -26,11 +29,11 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Settings in effect.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
-    /// The provider searches go to.
-    pub provider: Provider,
+    /// The providers searches go to, all at once.
+    pub providers: Vec<Provider>,
     pub format: OutputFormat,
     pub color: ColorWhen,
-    /// Time allowed for each search request.
+    /// Time allowed for a search. Providers that take longer are left out.
     pub timeout: Duration,
     pub searxng: SearXNG,
     pub serper: Serper,
@@ -65,7 +68,8 @@ pub struct Loaded {
 
 #[derive(Deserialize)]
 struct Document {
-    provider: Option<Provider>,
+    #[serde(default, deserialize_with = "one_or_many")]
+    provider: Option<Vec<Provider>>,
     format: Option<OutputFormat>,
     color: Option<ColorWhen>,
     timeout: Option<NonZeroU64>,
@@ -154,8 +158,14 @@ impl Config {
             None => Url::parse(SERPER_BASE_URL)?,
         };
 
+        let providers = document.provider.unwrap_or_else(|| vec![Provider::SearXNG]);
+        ensure!(
+            !providers.is_empty(),
+            "provider must name at least one provider"
+        );
+
         let config = Self {
-            provider: document.provider.unwrap_or(Provider::SearXNG),
+            providers,
             format: document.format.unwrap_or(OutputFormat::Pretty),
             color: document.color.unwrap_or(ColorWhen::Auto),
             timeout: document
@@ -173,6 +183,32 @@ impl Config {
             unknown_keys,
         })
     }
+}
+
+/// `provider` names one provider, or a list of them. Each is read as a
+/// [`Provider`], so a misspelt one gets serde's own message listing the names.
+fn one_or_many<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<Provider>>, D::Error> {
+    struct OneOrMany;
+
+    impl<'de> Visitor<'de> for OneOrMany {
+        type Value = Vec<Provider>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a provider or a list of providers")
+        }
+
+        fn visit_str<E: de::Error>(self, name: &str) -> Result<Self::Value, E> {
+            Provider::deserialize(name.into_deserializer()).map(|provider| vec![provider])
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, providers: A) -> Result<Self::Value, A::Error> {
+            Vec::deserialize(SeqAccessDeserializer::new(providers))
+        }
+    }
+
+    deserializer.deserialize_any(OneOrMany).map(Some)
 }
 
 /// `localhost:8888` parses as a URL with `localhost` as its scheme, so the
