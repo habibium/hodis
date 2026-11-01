@@ -26,7 +26,8 @@ fn hodis(server: &MockServer, dir: &TempDir) -> anyhow::Result<Command> {
     let mut command = Command::new(env!("CARGO_BIN_EXE_hodis"));
     command
         .env("HODIS_CONFIG", config_for(server, dir)?)
-        .env(hodis::engine::DATA_DIR_ENV, dir.path());
+        .env(hodis::engine::DATA_DIR_ENV, dir.path())
+        .env(hodis::cache::CACHE_DIR_ENV, dir.path());
     Ok(command)
 }
 
@@ -77,5 +78,38 @@ async fn a_double_dash_searches_for_a_command_name() -> anyhow::Result<()> {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_search_is_answered_from_the_cache_unless_told_not_to() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(HEALTHY_BODY))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir()?;
+    let urls = |extra: &[&str]| -> anyhow::Result<String> {
+        let output = hodis(&server, &dir)?
+            .args(["--format", "urls"])
+            .args(extra)
+            .args(["dns", "lookup"])
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8(output.stdout)?)
+    };
+
+    let searched = urls(&[])?;
+    let cached = urls(&[])?;
+    let fresh = urls(&["--no-cache"])?;
+
+    assert_eq!(cached, searched);
+    assert_eq!(fresh, searched);
     Ok(())
 }

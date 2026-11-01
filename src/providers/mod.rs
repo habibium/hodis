@@ -10,6 +10,7 @@ use reqwest::Client;
 use tokio::time::{Instant, timeout_at};
 use url::Url;
 
+use crate::cache::Cache;
 use crate::config::{self, Config};
 use crate::engine::{Engine, is_reachable};
 use crate::keys::{self, KeyedProvider};
@@ -26,32 +27,52 @@ const FUSION_K: f64 = 60.0;
 /// Searches `providers` at once and merges their results. Each one has until
 /// `config.timeout` to answer; those that fail or run out of time are reported
 /// in the diagnostics, and only a search that every one fails is an error.
-/// Steps taken to set up the engine hodis runs itself are reported to
-/// `progress`.
+/// A provider whose response `cache` holds is not searched again. Steps taken
+/// to set up the engine hodis runs itself are reported to `progress`.
 pub async fn search(
     providers: &[Provider],
     params: &SearchParams,
     config: &Config,
     client: &Client,
+    cache: Option<&Cache>,
     progress: &mut impl Write,
 ) -> Result<SearchResponse> {
     let providers = distinct(providers);
     ensure!(!providers.is_empty(), "there is no provider to search");
 
-    // One at a time, as setting up hodis's own engine reports to `progress`.
-    let mut connections = Vec::with_capacity(providers.len());
+    // A cached provider needs no connection, so a repeated search neither
+    // starts hodis's engine nor opens the keychain. The rest connect one at a
+    // time, as setting up hodis's own engine reports to `progress`.
+    let mut stages = Vec::with_capacity(providers.len());
     for &provider in &providers {
-        connections.push(connect(provider, config, client, progress).await);
+        stages.push(
+            match cache.and_then(|cache| cache.get(provider, config, params)) {
+                Some(response) => Stage::Cached(Box::new(response)),
+                None => Stage::Connected(connect(provider, config, client, progress).await),
+            },
+        );
     }
 
     let deadline = Instant::now() + config.timeout;
-    let outcomes = join_all(connections.into_iter().map(|connection| async move {
-        let provider = connection?;
-        timeout_at(deadline, provider.search(client, params))
-            .await
-            .unwrap_or_else(|_| Err(anyhow!("no answer within {}s", config.timeout.as_secs())))
-    }))
-    .await;
+    let searches = providers
+        .iter()
+        .zip(stages)
+        .map(|(&provider, stage)| async move {
+            let searcher = match stage {
+                Stage::Cached(response) => return Ok(*response),
+                Stage::Connected(connection) => connection?,
+            };
+            let response = timeout_at(deadline, searcher.search(client, params))
+                .await
+                .unwrap_or_else(|_| {
+                    Err(anyhow!("no answer within {}s", config.timeout.as_secs()))
+                })?;
+            if let Some(cache) = cache {
+                cache.put(provider, config, params, &response);
+            }
+            Ok(response)
+        });
+    let outcomes = join_all(searches).await;
 
     let mut answered = Vec::new();
     let mut failed = Vec::new();
@@ -109,6 +130,11 @@ async fn searxng_url(
     } else {
         Engine::resolve()?.ensure_running(client, progress).await
     }
+}
+
+enum Stage {
+    Cached(Box<SearchResponse>),
+    Connected(Result<Box<dyn SearchProvider>>),
 }
 
 /// `providers` in order, each named once.

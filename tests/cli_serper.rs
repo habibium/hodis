@@ -26,6 +26,7 @@ fn hodis(server: &MockServer, dir: &TempDir, settings: &str) -> anyhow::Result<C
     command
         .env("HODIS_CONFIG", config)
         .env(hodis::engine::DATA_DIR_ENV, dir.path())
+        .env(hodis::cache::CACHE_DIR_ENV, dir.path())
         .env_remove("SERPER_API_KEY");
     Ok(command)
 }

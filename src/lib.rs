@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod config;
 pub mod engine;
 pub mod keys;
@@ -44,7 +45,7 @@ impl Provider {
 // Field docs double as descriptions in the `json` format's schema, so each
 // stays on one line: a line break would land in the description.
 
-#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct SearchResponse {
     pub query: String,
     /// A direct answer, such as a fact or a definition, when there is one.
@@ -57,7 +58,7 @@ pub struct SearchResponse {
     pub diagnostics: Diagnostics,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, Default, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default, JsonSchema)]
 pub struct Diagnostics {
     /// Providers that failed or ran out of time, so their results are missing.
     pub failed_providers: Vec<ProviderIssue>,
@@ -68,19 +69,19 @@ pub struct Diagnostics {
     pub skipped_results: usize,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct ProviderIssue {
     pub provider: Provider,
     pub reason: String,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct EngineIssue {
     pub engine: String,
     pub reason: String,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct SearchResult {
     pub title: String,
     pub url: Url,
@@ -93,7 +94,7 @@ pub struct SearchResult {
     pub provider: Provider,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Answer {
     /// The page the answer comes from, when known.
     pub url: Option<Url>,

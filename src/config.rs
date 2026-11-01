@@ -26,6 +26,8 @@ pub const CONFIG_ENV: &str = "HODIS_CONFIG";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
+const DEFAULT_CACHE_TTL: Duration = Duration::from_hours(1);
+
 /// Settings in effect.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -37,6 +39,8 @@ pub struct Config {
     pub timeout: Duration,
     pub searxng: SearXNG,
     pub serper: Serper,
+    /// How long search results are reused. Zero turns the cache off.
+    pub cache_ttl: Duration,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,6 +81,8 @@ struct Document {
     searxng: SearXNGTable,
     #[serde(default)]
     serper: SerperTable,
+    #[serde(default)]
+    cache: CacheTable,
 }
 
 #[derive(Default, Deserialize)]
@@ -88,6 +94,11 @@ struct SearXNGTable {
 #[derive(Default, Deserialize)]
 struct SerperTable {
     url: Option<Url>,
+}
+
+#[derive(Default, Deserialize)]
+struct CacheTable {
+    ttl: Option<u64>,
 }
 
 /// The config file hodis reads: the one `HODIS_CONFIG` names, else
@@ -176,6 +187,10 @@ impl Config {
                 embedded: document.searxng.embedded.unwrap_or(!url_set),
             },
             serper: Serper { url: serper_url },
+            cache_ttl: document
+                .cache
+                .ttl
+                .map_or(DEFAULT_CACHE_TTL, Duration::from_secs),
         };
         Ok(Loaded {
             config,

@@ -10,6 +10,7 @@ use reqwest::Client;
 
 use hodis::{
     Provider, SearchParams,
+    cache::Cache,
     config::{self, Config, Loaded},
     keys::{ApiKey, Keychain, KeyedProvider},
     mcp,
@@ -43,6 +44,9 @@ struct Search {
     /// (default: searxng)
     #[arg(long, value_enum, value_delimiter = ',', value_name = "PROVIDER")]
     provider: Vec<Provider>,
+    /// Search afresh instead of reusing a cached result
+    #[arg(long)]
+    no_cache: bool,
     /// Output format (default: pretty)
     #[arg(short, long, value_enum)]
     format: Option<OutputFormat>,
@@ -123,7 +127,10 @@ async fn main() -> Result<()> {
             } else {
                 provider
             };
-            mcp::Server::new(config, providers)?.serve_stdio().await
+            let cache = Cache::open(config.cache_ttl);
+            mcp::Server::new(config, providers, cache)?
+                .serve_stdio()
+                .await
         }
         None => search(cli.search, config, &mut err).await,
     }
@@ -139,12 +146,20 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     } else {
         &args.provider
     };
+    let cache = Cache::open(config.cache_ttl).map(|cache| {
+        if args.no_cache {
+            cache.without_reads()
+        } else {
+            cache
+        }
+    });
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
     };
 
-    let response = providers::search(providers, &params, &config, &client, err).await?;
+    let response =
+        providers::search(providers, &params, &config, &client, cache.as_ref(), err).await?;
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends

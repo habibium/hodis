@@ -27,6 +27,7 @@ fn an_empty_file_keeps_every_default() {
     assert_eq!(config.format, OutputFormat::Pretty);
     assert_eq!(config.color, ColorWhen::Auto);
     assert_eq!(config.timeout, Duration::from_secs(10));
+    assert_eq!(config.cache_ttl, Duration::from_hours(1));
     assert_eq!(config.searxng.url.as_str(), "http://localhost:8888/");
     assert!(config.searxng.embedded);
     assert_eq!(config.serper.url.as_str(), "https://google.serper.dev/");
@@ -48,8 +49,13 @@ fn every_setting_is_read() {
 
         [serper]
         url = "https://serper-proxy.example.org/"
+
+        [cache]
+        ttl = 90
         "#,
     );
+
+    assert_eq!(config.cache_ttl, Duration::from_secs(90));
 
     assert_eq!(config.providers, [Provider::Serper]);
     assert_eq!(config.format, OutputFormat::Json);
@@ -129,6 +135,11 @@ fn a_serper_url_must_be_http_and_gains_a_trailing_slash() {
         .serper
         .url;
     assert_eq!(url.as_str(), "https://proxy.example.org/serper/");
+}
+
+#[test]
+fn a_cache_ttl_of_zero_is_kept_to_turn_the_cache_off() {
+    assert_eq!(parse("[cache]\nttl = 0").cache_ttl, Duration::ZERO);
 }
 
 #[test]

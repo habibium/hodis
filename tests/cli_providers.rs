@@ -58,6 +58,7 @@ fn hodis(mocks: &Mocks, dir: &TempDir, settings: &str) -> anyhow::Result<Command
     command
         .env("HODIS_CONFIG", config)
         .env(hodis::engine::DATA_DIR_ENV, dir.path())
+        .env(hodis::cache::CACHE_DIR_ENV, dir.path())
         .env("SERPER_API_KEY", "test-key")
         .args(["--format", "json"]);
     Ok(command)

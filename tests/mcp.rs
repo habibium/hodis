@@ -15,6 +15,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use hodis::{
     Provider,
+    cache::Cache,
     config::Config,
     mcp::Server,
     output::{OutputFormat, render},
@@ -27,8 +28,12 @@ type Client = RunningService<RoleClient, ()>;
 
 /// A client of a server whose searches go to `searxng`.
 async fn client_for(searxng: &MockServer) -> anyhow::Result<Client> {
+    client_with_cache(searxng, None).await
+}
+
+async fn client_with_cache(searxng: &MockServer, cache: Option<Cache>) -> anyhow::Result<Client> {
     let config = Config::parse(&format!("[searxng]\nurl = \"{}\"\n", searxng.uri()))?.config;
-    let server = Server::new(config, vec![Provider::SearXNG])?;
+    let server = Server::new(config, vec![Provider::SearXNG], cache)?;
     let (server_end, client_end) = tokio::io::duplex(1 << 16);
     tokio::spawn(async move {
         server.serve(server_end).await?.waiting().await?;
@@ -256,6 +261,26 @@ async fn page_zero_is_refused_without_a_search() -> anyhow::Result<()> {
 
     assert_eq!(result.is_error, Some(true));
     assert_eq!(text(&result), "pages are numbered from 1");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_repeated_search_is_answered_from_the_servers_cache() -> anyhow::Result<()> {
+    let searxng = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(HEALTHY_BODY))
+        .expect(1)
+        .mount(&searxng)
+        .await;
+    let dir = tempfile::tempdir()?;
+    let cache = Cache::new(dir.path().to_path_buf(), Duration::from_hours(1));
+    let client = client_with_cache(&searxng, Some(cache)).await?;
+
+    let searched = web_search(&client, json!({"query": "dns lookup"})).await?;
+    let cached = web_search(&client, json!({"query": "dns lookup"})).await?;
+
+    assert_eq!(cached.structured_content, searched.structured_content);
     Ok(())
 }
 

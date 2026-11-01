@@ -18,6 +18,7 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+use crate::cache::Cache;
 use crate::config::Config;
 use crate::output::Versioned;
 use crate::{Provider, SearchParams, SearchResponse, providers};
@@ -28,6 +29,7 @@ pub struct Server {
     config: Config,
     providers: Vec<Provider>,
     client: Client,
+    cache: Option<Cache>,
 }
 
 // Field docs are the descriptions agents read in the tool's input schema.
@@ -43,13 +45,15 @@ struct WebSearch {
 }
 
 impl Server {
-    /// A server searching `providers`, set up as `config` says.
-    pub fn new(config: Config, providers: Vec<Provider>) -> Result<Self> {
+    /// A server searching `providers`, set up as `config` says, reusing the
+    /// responses `cache` holds.
+    pub fn new(config: Config, providers: Vec<Provider>, cache: Option<Cache>) -> Result<Self> {
         let client = Client::builder().build()?;
         Ok(Self {
             config,
             providers,
             client,
+            cache,
         })
     }
 
@@ -72,6 +76,7 @@ impl Server {
             params,
             &self.config,
             &self.client,
+            self.cache.as_ref(),
             &mut progress,
         )
         .await

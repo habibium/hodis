@@ -1,6 +1,7 @@
 //! How the binary finds and reports its config file. Every case exits before a
-//! search, so nothing reaches the network; the data directory is pointed at a
-//! scratch one all the same, so a regression cannot provision a real engine.
+//! search, so nothing reaches the network; the data and cache directories are
+//! pointed at scratch ones all the same, so a regression cannot provision a
+//! real engine or write to the real cache.
 
 use std::fs;
 use std::path::Path;
@@ -12,6 +13,7 @@ fn hodis(config: &Path, data: &TempDir, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_hodis"))
         .env("HODIS_CONFIG", config)
         .env(hodis::engine::DATA_DIR_ENV, data.path())
+        .env(hodis::cache::CACHE_DIR_ENV, data.path())
         .args(args)
         .output()
         .expect("the binary runs")
