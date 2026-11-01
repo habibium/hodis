@@ -125,6 +125,10 @@ pub struct SearchParams {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait marks its boxed futures must_use, as they already are"
+)]
 pub trait SearchProvider: Send + Sync {
     async fn search(&self, client: &Client, params: &SearchParams) -> Result<SearchResponse>;
 }
