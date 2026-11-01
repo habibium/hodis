@@ -18,6 +18,7 @@ use url::Url;
 
 use crate::Provider;
 use crate::output::{ColorWhen, OutputFormat};
+use crate::providers::duckduckgo::DUCKDUCKGO_BASE_URL;
 use crate::providers::searxng::SEARXNG_BASE_URL;
 use crate::providers::serper::SERPER_BASE_URL;
 
@@ -39,6 +40,7 @@ pub struct Config {
     pub timeout: Duration,
     pub searxng: SearXNG,
     pub serper: Serper,
+    pub duckduckgo: DuckDuckGo,
     /// How long search results are reused. Zero turns the cache off.
     pub cache_ttl: Duration,
 }
@@ -57,6 +59,13 @@ pub struct SearXNG {
 pub struct Serper {
     /// The API's address, which only a proxy in front of Serper changes. Ends
     /// in `/`, like [`SearXNG::url`].
+    pub url: Url,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DuckDuckGo {
+    /// The results page's address, which only a proxy in front of DuckDuckGo
+    /// changes. Ends in `/`, like [`SearXNG::url`].
     pub url: Url,
 }
 
@@ -82,6 +91,8 @@ struct Document {
     #[serde(default)]
     serper: SerperTable,
     #[serde(default)]
+    duckduckgo: DuckDuckGoTable,
+    #[serde(default)]
     cache: CacheTable,
 }
 
@@ -93,6 +104,11 @@ struct SearXNGTable {
 
 #[derive(Default, Deserialize)]
 struct SerperTable {
+    url: Option<Url>,
+}
+
+#[derive(Default, Deserialize)]
+struct DuckDuckGoTable {
     url: Option<Url>,
 }
 
@@ -168,6 +184,10 @@ impl Config {
             Some(url) => base_url("serper.url", url)?,
             None => Url::parse(SERPER_BASE_URL)?,
         };
+        let duckduckgo_url = match document.duckduckgo.url {
+            Some(url) => base_url("duckduckgo.url", url)?,
+            None => Url::parse(DUCKDUCKGO_BASE_URL)?,
+        };
 
         let providers = document.provider.unwrap_or_else(|| vec![Provider::SearXNG]);
         ensure!(
@@ -187,6 +207,9 @@ impl Config {
                 embedded: document.searxng.embedded.unwrap_or(!url_set),
             },
             serper: Serper { url: serper_url },
+            duckduckgo: DuckDuckGo {
+                url: duckduckgo_url,
+            },
             cache_ttl: document
                 .cache
                 .ttl

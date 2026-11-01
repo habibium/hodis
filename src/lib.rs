@@ -20,9 +20,8 @@ use url::Url;
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ValueEnum, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
-    /// Not searchable yet, so neither a flag nor a config file can choose it.
-    #[serde(skip_deserializing)]
-    #[value(skip)]
+    /// DuckDuckGo's web results, read from its results page
+    #[value(name = "duckduckgo")]
     DuckDuckGo,
     /// A SearXNG instance: yours, or one hodis runs itself
     #[value(name = "searxng")]

@@ -360,12 +360,14 @@ mod tests {
     }
 
     #[test]
-    fn a_provider_that_cannot_search_yet_is_not_offered() {
+    fn every_provider_is_offered_by_its_lowercase_name() {
         assert_eq!(
-            parse(&["--provider", "serper", "rust"]).search.provider,
-            [Provider::Serper]
+            parse(&["--provider", "duckduckgo,searxng,serper", "rust"])
+                .search
+                .provider,
+            [Provider::DuckDuckGo, Provider::SearXNG, Provider::Serper]
         );
-        assert!(Cli::try_parse_from(["hodis", "--provider", "duckduckgo", "rust"]).is_err());
+        assert!(Cli::try_parse_from(["hodis", "--provider", "duck-duck-go", "rust"]).is_err());
     }
 
     #[test]

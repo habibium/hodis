@@ -31,6 +31,10 @@ fn an_empty_file_keeps_every_default() {
     assert_eq!(config.searxng.url.as_str(), "http://localhost:8888/");
     assert!(config.searxng.embedded);
     assert_eq!(config.serper.url.as_str(), "https://google.serper.dev/");
+    assert_eq!(
+        config.duckduckgo.url.as_str(),
+        "https://html.duckduckgo.com/"
+    );
     assert_eq!(loaded.unknown_keys, Vec::<String>::new());
 }
 
@@ -50,6 +54,9 @@ fn every_setting_is_read() {
         [serper]
         url = "https://serper-proxy.example.org/"
 
+        [duckduckgo]
+        url = "https://duckduckgo-proxy.example.org"
+
         [cache]
         ttl = 90
         "#,
@@ -66,6 +73,10 @@ fn every_setting_is_read() {
     assert_eq!(
         config.serper.url.as_str(),
         "https://serper-proxy.example.org/"
+    );
+    assert_eq!(
+        config.duckduckgo.url.as_str(),
+        "https://duckduckgo-proxy.example.org/"
     );
 }
 
@@ -163,15 +174,6 @@ fn an_empty_list_of_providers_is_refused() {
 fn a_misspelt_provider_in_a_list_is_named() {
     let message = error("provider = ['searxng', 'serpr']");
     assert!(message.contains("unknown variant `serpr`"), "{message}");
-}
-
-#[test]
-fn a_provider_that_cannot_search_yet_is_refused() {
-    let message = error("provider = 'duckduckgo'");
-    assert!(
-        message.contains("unknown variant `duckduckgo`"),
-        "{message}"
-    );
 }
 
 #[test]

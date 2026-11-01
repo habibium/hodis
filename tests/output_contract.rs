@@ -144,3 +144,17 @@ fn search_provider_trait_stays_dyn_compatible() {
     let providers: Vec<Box<dyn SearchProvider>> = Vec::new();
     assert!(providers.is_empty());
 }
+
+#[test]
+fn every_provider_is_a_valid_value_in_the_schema() -> anyhow::Result<()> {
+    let schema = serde_json::to_value(schemars::schema_for!(Versioned<SearchResponse>))?;
+    let mut names: Vec<&str> = schema["$defs"]["Provider"]["oneOf"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|variant| variant["const"].as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["duckduckgo", "searxng", "serper"], "{schema:#}");
+    Ok(())
+}

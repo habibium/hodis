@@ -153,7 +153,7 @@ fn key(provider: Provider, config: &Config, params: &SearchParams) -> String {
     let instance = match provider {
         Provider::SearXNG => config.searxng.url.as_str(),
         Provider::Serper => config.serper.url.as_str(),
-        Provider::DuckDuckGo => "",
+        Provider::DuckDuckGo => config.duckduckgo.url.as_str(),
     };
     let query = params
         .query

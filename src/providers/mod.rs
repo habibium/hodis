@@ -1,10 +1,11 @@
+pub mod duckduckgo;
 pub mod searxng;
 pub mod serper;
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
-use anyhow::{Context, Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use futures::future::join_all;
 use reqwest::Client;
 use tokio::time::{Instant, timeout_at};
@@ -18,6 +19,7 @@ use crate::{
     Diagnostics, Provider, ProviderIssue, SearchParams, SearchProvider, SearchResponse,
     SearchResult,
 };
+use duckduckgo::DuckDuckGoProvider;
 use searxng::SearXNGProvider;
 use serper::SerperProvider;
 
@@ -131,7 +133,9 @@ async fn connect(
             // The keychain may wait on an unlock prompt, which must not stall the runtime.
             key: tokio::task::spawn_blocking(|| keys::find(KeyedProvider::Serper)).await??,
         }),
-        Provider::DuckDuckGo => bail!("hodis cannot search DuckDuckGo yet"),
+        Provider::DuckDuckGo => Box::new(DuckDuckGoProvider {
+            base_url: config.duckduckgo.url.clone(),
+        }),
     })
 }
 
