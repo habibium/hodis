@@ -1,0 +1,138 @@
+# Builds hodis for each platform and, for a version tag, publishes a GitHub
+# release with the archives, their checksums and the install scripts, then
+# installs it from there on each platform to prove the release works. Run by
+# hand, it only builds, which checks the builds before a tag is pushed.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      matrix:
+        include:
+          # Static musl builds run on any Linux, whatever its glibc.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-15
+          - target: aarch64-apple-darwin
+            os: macos-15
+          - target: x86_64-pc-windows-msvc
+            os: windows-2025
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install the musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        if: runner.os != 'Windows'
+        run: |
+          name=hodis-${{ matrix.target }}
+          mkdir "$name"
+          cp "target/${{ matrix.target }}/release/hodis" README.md LICENSE "$name/"
+          tar -czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+      - name: Package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "hodis-${{ matrix.target }}"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/hodis.exe", README.md, LICENSE $name
+          Compress-Archive $name "$name.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 "$name.zip").Hash.ToLower()
+          Set-Content -NoNewline -Encoding ascii "$name.zip.sha256" "$hash  $name.zip`n"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hodis-${{ matrix.target }}
+          path: hodis-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check that the tag matches the crate's version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          test "v$version" = "$GITHUB_REF_NAME" || {
+            echo "the tag is $GITHUB_REF_NAME but Cargo.toml says $version" >&2
+            exit 1
+          }
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Add the install scripts
+        run: |
+          cp scripts/install.sh dist/hodis-installer.sh
+          cp scripts/install.ps1 dist/hodis-installer.ps1
+      - name: Take the release notes from the changelog
+        run: |
+          awk -v version="${GITHUB_REF_NAME#v}" '
+            /^## / { if (found) exit; found = ($2 == version); next }
+            found
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}" >&2; exit 1; }
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag --title "hodis ${GITHUB_REF_NAME#v}" --notes-file notes.md
+
+  verify:
+    name: install on ${{ matrix.os }}
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install with the shell script
+        if: runner.os != 'Windows'
+        env:
+          HODIS_VERSION: ${{ github.ref_name }}
+          HODIS_INSTALL_DIR: ${{ runner.temp }}/bin
+        run: |
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hodis-installer.sh" | sh
+          test "$("$HODIS_INSTALL_DIR/hodis" --version)" = "hodis ${GITHUB_REF_NAME#v}"
+      - name: Install with the PowerShell script
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          HODIS_VERSION: ${{ github.ref_name }}
+          HODIS_INSTALL_DIR: ${{ runner.temp }}\bin
+        run: |
+          irm "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hodis-installer.ps1" | iex
+          $version = & "$env:HODIS_INSTALL_DIR\hodis.exe" --version
+          if ($version -ne "hodis $($env:GITHUB_REF_NAME.TrimStart('v'))") { throw "installed $version" }
