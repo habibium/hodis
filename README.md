@@ -5,8 +5,10 @@ Web search from the terminal, for people and for AI agents.
 hodis searches the web and prints what it finds: styled for reading in a
 terminal, or as JSON, Markdown, plain text or bare URLs for scripts and notes.
 It searches through SearXNG, either an instance you run or one hodis sets up for
-itself, or gets Google results from Serper with an API key. `hodis mcp` offers
-the same search to AI agents as an MCP tool.
+itself, or gets Google results from Serper with an API key. Run without a
+query, it opens a full-screen search instead, for moving through results and
+opening them in your browser. `hodis mcp` offers the same search to AI agents
+as an MCP tool.
 
 ```console
 $ hodis capital of norway
@@ -56,6 +58,31 @@ out of the results.
 hodis keeps each search's results for an hour, so repeating a search is
 instant and costs no Serper credit. `--no-cache` searches afresh and keeps the
 new results.
+
+## Interactive search
+
+Run `hodis` in a terminal without a query to search full-screen: type a search,
+press enter, and move through the results.
+
+| Key                | Action                                             |
+| ------------------ | -------------------------------------------------- |
+| `↑` `↓` or `j` `k` | Select a result; `PgUp` `PgDn` and `g` `G` jump    |
+| `enter` or `o`     | Open the selected result in your browser           |
+| `y`                | Copy its link                                      |
+| `n` `p`            | Show the next or previous page of results          |
+| `/`                | Edit the search; `esc` goes back to the results    |
+| `r`                | Search again, past the cache                       |
+| `q` or `esc`       | Quit                                               |
+
+The search field takes the usual line-editing keys, such as `ctrl-w` to delete
+a word and `ctrl-u` to clear the line. `hodis -i rust borrow checker` opens the
+view with that search made, and `--provider`, `--page`, `--no-cache` and
+`--color` work as they do for printed results. If hodis needs to set up its own
+SearXNG, it does so before the view opens.
+
+Copying goes through the terminal, with the OSC 52 escape sequence, so it
+reaches your clipboard over SSH too. Not every terminal allows it; in tmux,
+`set -g set-clipboard on` passes it on.
 
 ## Providers
 
