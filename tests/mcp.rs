@@ -14,7 +14,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use hodis::{
-    Provider,
+    Provider, Providers,
     cache::Cache,
     config::Config,
     mcp::Server,
@@ -33,7 +33,7 @@ async fn client_for(searxng: &MockServer) -> anyhow::Result<Client> {
 
 async fn client_with_cache(searxng: &MockServer, cache: Option<Cache>) -> anyhow::Result<Client> {
     let config = Config::parse(&format!("[searxng]\nurl = \"{}\"\n", searxng.uri()))?.config;
-    let server = Server::new(config, vec![Provider::SearXNG], cache)?;
+    let server = Server::new(config, Providers::Listed(vec![Provider::SearXNG]), cache)?;
     let (server_end, client_end) = tokio::io::duplex(1 << 16);
     tokio::spawn(async move {
         server.serve(server_end).await?.waiting().await?;

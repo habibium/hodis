@@ -12,11 +12,11 @@ use tokio::time::{Instant, timeout_at};
 use url::Url;
 
 use crate::cache::Cache;
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::engine::{Engine, is_reachable};
 use crate::keys::{self, KeyedProvider};
 use crate::{
-    Diagnostics, Provider, ProviderIssue, SearchParams, SearchProvider, SearchResponse,
+    Diagnostics, Provider, ProviderIssue, Providers, SearchParams, SearchProvider, SearchResponse,
     SearchResult,
 };
 use duckduckgo::DuckDuckGoProvider;
@@ -29,17 +29,22 @@ const FUSION_K: f64 = 60.0;
 /// Searches `providers` at once and merges their results. Each one has until
 /// `config.timeout` to answer; those that fail or run out of time are reported
 /// in the diagnostics, and only a search that every one fails is an error.
-/// A provider whose response `cache` holds is not searched again. Steps taken
-/// to set up the engine hodis runs itself are reported to `progress`.
+/// A provider whose response `cache` holds is not searched again. Only a
+/// SearXNG named in `providers` falls back to the engine hodis runs itself,
+/// and the steps taken to set that up are reported to `progress`.
 pub async fn search(
-    providers: &[Provider],
+    providers: &Providers,
     params: &SearchParams,
     config: &Config,
     client: &Client,
     cache: Option<&Cache>,
     progress: &mut impl Write,
 ) -> Result<SearchResponse> {
-    let providers = distinct(providers);
+    let (providers, embedded) = match providers {
+        Providers::Listed(listed) => (distinct(listed), config.searxng.embedded),
+        // A SearXNG picked this way has just answered, so it needs no fallback.
+        Providers::Auto => (vec![pick(config, client).await], false),
+    };
     ensure!(!providers.is_empty(), "there is no provider to search");
 
     // A cached provider needs no connection, so a repeated search neither
@@ -50,7 +55,9 @@ pub async fn search(
         stages.push(
             match cache.and_then(|cache| cache.get(provider, config, params)) {
                 Some(response) => Stage::Cached(Box::new(response)),
-                None => Stage::Connected(connect(provider, config, client, progress).await),
+                None => {
+                    Stage::Connected(connect(provider, config, client, embedded, progress).await)
+                }
             },
         );
     }
@@ -103,30 +110,44 @@ pub async fn search(
 /// up lets uv write to the terminal, which a full-screen interface must do
 /// before it takes the screen over.
 pub async fn prepare(
-    providers: &[Provider],
+    providers: &Providers,
     config: &Config,
     client: &Client,
     progress: &mut impl Write,
 ) -> Result<()> {
-    if providers.contains(&Provider::SearXNG) {
-        searxng_url(client, &config.searxng, progress)
+    if let Providers::Listed(listed) = providers
+        && listed.contains(&Provider::SearXNG)
+    {
+        searxng_url(client, config, config.searxng.embedded, progress)
             .await
             .with_context(|| format!("cannot search {}", Provider::SearXNG.name()))?;
     }
     Ok(())
 }
 
+/// What [`Providers::Auto`] searches: a SearXNG instance that answers at its
+/// configured address, or else DuckDuckGo.
+async fn pick(config: &Config, client: &Client) -> Provider {
+    if is_reachable(client, &config.searxng.url).await {
+        Provider::SearXNG
+    } else {
+        Provider::DuckDuckGo
+    }
+}
+
 /// `provider`, set up as `config` says and ready to search. Steps taken to set
-/// up the engine hodis runs itself are reported to `progress`.
+/// up the engine hodis runs itself, if `embedded` allows it, are reported to
+/// `progress`.
 async fn connect(
     provider: Provider,
     config: &Config,
     client: &Client,
+    embedded: bool,
     progress: &mut impl Write,
 ) -> Result<Box<dyn SearchProvider>> {
     Ok(match provider {
         Provider::SearXNG => Box::new(SearXNGProvider {
-            base_url: searxng_url(client, &config.searxng, progress).await?,
+            base_url: searxng_url(client, config, embedded, progress).await?,
         }),
         Provider::Serper => Box::new(SerperProvider {
             base_url: config.serper.url.clone(),
@@ -140,15 +161,17 @@ async fn connect(
 }
 
 /// The configured instance is one the user may or may not be running; when
-/// nothing answers there, hodis falls back to the engine it runs itself, if
-/// allowed.
+/// nothing answers there, hodis falls back to the engine it runs itself if
+/// `embedded` allows it.
 async fn searxng_url(
     client: &Client,
-    instance: &config::SearXNG,
+    config: &Config,
+    embedded: bool,
     progress: &mut impl Write,
 ) -> Result<Url> {
-    if !instance.embedded || is_reachable(client, &instance.url).await {
-        Ok(instance.url.clone())
+    let url = &config.searxng.url;
+    if !embedded || is_reachable(client, url).await {
+        Ok(url.clone())
     } else {
         Engine::resolve()?.ensure_running(client, progress).await
     }

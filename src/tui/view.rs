@@ -11,7 +11,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, Mode, Notice, Reason, Shown};
 use crate::output::{one_line, warnings};
-use crate::{Provider, SearchResponse, SearchResult};
+use crate::{Provider, Providers, SearchResponse, SearchResult};
 
 const SNIPPET_LINES: usize = 2;
 const ANSWER_LINES: usize = 3;
@@ -293,7 +293,7 @@ fn status_line(app: &App, theme: &Theme) -> Line<'static> {
     }
     match &app.shown {
         Shown::Nothing => Line::styled(
-            format!(" Searches go to {}", names(&app.providers)),
+            format!(" Searches go to {}", describe(&app.providers)),
             theme.faint,
         ),
         Shown::Failed { .. } => Line::default(),
@@ -356,6 +356,13 @@ fn key_line(app: &App, width: usize, theme: &Theme) -> Line<'static> {
         spans.push(Span::styled(format!("{action} "), theme.faint));
     }
     Line::from(spans)
+}
+
+fn describe(providers: &Providers) -> String {
+    match providers {
+        Providers::Auto => "SearXNG when one answers, else DuckDuckGo".to_owned(),
+        Providers::Listed(listed) => names(listed),
+    }
 }
 
 fn names(providers: &[Provider]) -> String {
@@ -450,7 +457,7 @@ mod tests {
     use super::{Theme, draw, fit, wrap};
     use crate::providers::searxng::SearXNGProvider;
     use crate::tui::app::App;
-    use crate::{Provider, SearchParams, SearchResponse};
+    use crate::{Providers, SearchParams, SearchResponse};
 
     const HEALTHY_BODY: &str = include_str!("../../tests/fixtures/healthy.json");
 
@@ -475,7 +482,7 @@ mod tests {
     }
 
     fn searching() -> App {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         app.search_for(SearchParams {
             query: "dns lookup".to_owned(),
             page: None,
@@ -494,7 +501,7 @@ mod tests {
 
     #[test]
     fn the_start_screen() {
-        let terminal = drawn(&mut App::new(vec![Provider::SearXNG]), 60, 8, true);
+        let terminal = drawn(&mut App::new(Providers::Auto), 60, 8, true);
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -571,7 +578,7 @@ mod tests {
     fn tiny_terminals_are_drawn_without_panicking() {
         for (width, height) in [(0, 0), (1, 1), (3, 2), (10, 4), (20, 6), (30, 10)] {
             drawn(&mut after(Ok(fixture())), width, height, true);
-            drawn(&mut App::new(vec![Provider::SearXNG]), width, height, true);
+            drawn(&mut App::new(Providers::Auto), width, height, true);
         }
     }
 

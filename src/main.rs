@@ -9,7 +9,7 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, error::Erro
 use reqwest::Client;
 
 use hodis::{
-    Provider, SearchParams,
+    Provider, Providers, SearchParams,
     cache::Cache,
     config::{self, Config, Loaded},
     keys::{ApiKey, Keychain, KeyedProvider},
@@ -124,11 +124,7 @@ async fn main() -> Result<()> {
             }
             // Its lock on stderr would hold up any other thread writing there.
             drop(err);
-            let providers = if provider.is_empty() {
-                config.providers.clone()
-            } else {
-                provider
-            };
+            let providers = chosen(provider, &config);
             let cache = Cache::open(config.cache_ttl);
             mcp::Server::new(config, providers, cache)?
                 .serve_stdio()
@@ -146,11 +142,7 @@ async fn interactive(args: Search, config: Config, err: &mut impl Write) -> Resu
         can_draw(),
         "the interactive search needs a terminal on standard input and output"
     );
-    let providers = if args.provider.is_empty() {
-        config.providers.clone()
-    } else {
-        args.provider
-    };
+    let providers = chosen(args.provider, &config);
     let cache = open_cache(config.cache_ttl, args.no_cache);
     let first = (!args.query.is_empty()).then(|| SearchParams {
         query: args.query.join(" "),
@@ -164,11 +156,7 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     let client = Client::builder().build()?;
     let mut out = AutoStream::auto(io::stdout().lock());
 
-    let providers = if args.provider.is_empty() {
-        &config.providers
-    } else {
-        &args.provider
-    };
+    let providers = chosen(args.provider, &config);
     let cache = open_cache(config.cache_ttl, args.no_cache);
     let params = SearchParams {
         query: args.query.join(" "),
@@ -176,7 +164,7 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     };
 
     let response =
-        providers::search(providers, &params, &config, &client, cache.as_ref(), err).await?;
+        providers::search(&providers, &params, &config, &client, cache.as_ref(), err).await?;
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends
@@ -187,6 +175,15 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
+}
+
+/// The providers `--provider` names, or else the config file's choice.
+fn chosen(flag: Vec<Provider>, config: &Config) -> Providers {
+    if flag.is_empty() {
+        config.providers.clone()
+    } else {
+        Providers::Listed(flag)
+    }
 }
 
 /// The cache, still kept up to date but not read from if `no_cache`.

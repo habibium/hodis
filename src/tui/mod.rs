@@ -25,7 +25,7 @@ use url::Url;
 
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::{Provider, SearchParams, SearchResponse, providers};
+use crate::{Providers, SearchParams, SearchResponse, providers};
 use app::{App, Command};
 use view::Theme;
 
@@ -37,7 +37,7 @@ const TICK: Duration = Duration::from_millis(80);
 /// itself is set up first if needed, with the steps reported to `progress`.
 pub async fn run(
     config: Config,
-    providers: Vec<Provider>,
+    providers: Providers,
     cache: Option<Cache>,
     first: Option<SearchParams>,
     progress: &mut impl Write,
@@ -84,7 +84,7 @@ pub async fn run(
 #[derive(Debug)]
 struct Session {
     config: Config,
-    providers: Vec<Provider>,
+    providers: Providers,
     client: Client,
     cache: Option<Cache>,
 }
@@ -232,7 +232,7 @@ mod tests {
 
     use super::{App, Desktop, Events, Session, Theme, event_loop};
     use crate::config::Config;
-    use crate::{Provider, SearchParams};
+    use crate::{Provider, Providers, SearchParams};
 
     const HEALTHY_BODY: &str = include_str!("../../tests/fixtures/healthy.json");
 
@@ -281,7 +281,7 @@ mod tests {
             .config;
         Session {
             config,
-            providers: vec![Provider::SearXNG],
+            providers: Providers::Listed(vec![Provider::SearXNG]),
             client: Client::new(),
             cache: None,
         }

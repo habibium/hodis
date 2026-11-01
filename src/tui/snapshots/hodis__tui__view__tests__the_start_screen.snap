@@ -8,5 +8,5 @@ expression: terminal.backend()
 "                                                            "
 "                                                            "
 "                                                            "
-" Searches go to SearXNG                                     "
+" Searches go to SearXNG when one answers, else DuckDuckGo   "
 " enter search  esc quit                                     "

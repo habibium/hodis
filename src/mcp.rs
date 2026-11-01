@@ -21,13 +21,13 @@ use serde::Deserialize;
 use crate::cache::Cache;
 use crate::config::Config;
 use crate::output::Versioned;
-use crate::{Provider, SearchParams, SearchResponse, providers};
+use crate::{Providers, SearchParams, SearchResponse, providers};
 
 /// An MCP server with one tool, `web_search`.
 #[derive(Debug)]
 pub struct Server {
     config: Config,
-    providers: Vec<Provider>,
+    providers: Providers,
     client: Client,
     cache: Option<Cache>,
 }
@@ -47,7 +47,7 @@ struct WebSearch {
 impl Server {
     /// A server searching `providers`, set up as `config` says, reusing the
     /// responses `cache` holds.
-    pub fn new(config: Config, providers: Vec<Provider>, cache: Option<Cache>) -> Result<Self> {
+    pub fn new(config: Config, providers: Providers, cache: Option<Cache>) -> Result<Self> {
         let client = Client::builder().build()?;
         Ok(Self {
             config,

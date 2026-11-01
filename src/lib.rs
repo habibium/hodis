@@ -30,6 +30,16 @@ pub enum Provider {
     Serper,
 }
 
+/// Which providers a search goes to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Providers {
+    /// SearXNG when an instance answers at its configured address, and
+    /// otherwise DuckDuckGo, so that searching needs nothing installed.
+    Auto,
+    /// These, all at once, as a config file or `--provider` names them.
+    Listed(Vec<Provider>),
+}
+
 impl Provider {
     /// The name messages use.
     #[must_use]

@@ -15,10 +15,16 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const HEALTHY_BODY: &str = include_str!("fixtures/healthy.json");
 
-/// A config file in `dir` naming `server` as the SearXNG instance.
+/// A config file in `dir` naming `server` as the SearXNG instance to search.
 fn config_for(server: &MockServer, dir: &TempDir) -> anyhow::Result<PathBuf> {
     let config = dir.path().join("config.toml");
-    fs::write(&config, format!("[searxng]\nurl = \"{}\"\n", server.uri()))?;
+    fs::write(
+        &config,
+        format!(
+            "provider = \"searxng\"\n[searxng]\nurl = \"{}\"\n",
+            server.uri()
+        ),
+    )?;
     Ok(config)
 }
 

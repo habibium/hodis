@@ -58,7 +58,7 @@ async fn stdout_carries_mcp_messages_and_nothing_else() -> anyhow::Result<()> {
     let dir = tempfile::tempdir()?;
     // A misspelt key draws a warning, which belongs on stderr.
     let settings = format!(
-        "colour = \"never\"\n[searxng]\nurl = \"{}\"\n",
+        "colour = \"never\"\nprovider = \"searxng\"\n[searxng]\nurl = \"{}\"\n",
         searxng.uri()
     );
     let mut child = hodis_mcp(&dir, &settings)?

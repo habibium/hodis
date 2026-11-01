@@ -9,7 +9,9 @@ use std::time::{Duration, SystemTime};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use hodis::{Provider, SearchParams, SearchResponse, cache::Cache, config::Config, providers};
+use hodis::{
+    Provider, Providers, SearchParams, SearchResponse, cache::Cache, config::Config, providers,
+};
 
 const HEALTHY_BODY: &str = include_str!("fixtures/healthy.json");
 
@@ -31,7 +33,7 @@ async fn search(
     let config = Config::parse(&format!("[searxng]\nurl = \"{instance}\"\n"))?.config;
     let client = reqwest::Client::new();
     providers::search(
-        &[Provider::SearXNG],
+        &Providers::Listed(vec![Provider::SearXNG]),
         params,
         &config,
         &client,

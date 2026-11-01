@@ -1,5 +1,6 @@
-# Proves the embedded-engine bootstrap on machines hodis's end users actually
-# have: no curl, python, pip or uv on PATH. The build step uses the full
+# Proves the embedded-engine bootstrap, which a search naming SearXNG starts
+# when no instance answers, on machines hodis's end users actually have: no
+# curl, python, pip or uv on PATH. The build step uses the full
 # runner toolchain; the smoke step then strips PATH down to the OS's own
 # binaries, so the only external tools hodis can reach are the ones every
 # stock install ships (notably tar).
@@ -31,7 +32,7 @@ jobs:
         env:
           HODIS_DATA_DIR: ${{ runner.temp }}/hodis-data
         run: |
-          env PATH=/usr/bin:/bin ./target/release/hodis "rust programming language"
+          env PATH=/usr/bin:/bin ./target/release/hodis --provider searxng "rust programming language"
           echo "--- data dir ---"
           find "$HODIS_DATA_DIR" -maxdepth 3 | head -30
           test -x "$HODIS_DATA_DIR/bin/uv"
@@ -44,7 +45,7 @@ jobs:
           HODIS_DATA_DIR: ${{ runner.temp }}\hodis-data
         run: |
           $env:PATH = "C:\Windows\System32;C:\Windows"
-          & .\target\release\hodis.exe "rust programming language"
+          & .\target\release\hodis.exe --provider searxng "rust programming language"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "--- data dir ---"
           Get-ChildItem -Recurse -Depth 2 $env:HODIS_DATA_DIR | Select-Object -First 30
@@ -66,7 +67,7 @@ jobs:
           HODIS_DATA_DIR: ${{ runner.temp }}/hodis-data
         run: |
           start=$(date +%s)
-          env PATH=/usr/bin:/bin ./target/release/hodis "cargo build"
+          env PATH=/usr/bin:/bin ./target/release/hodis --provider searxng "cargo build"
           echo "reuse took $(( $(date +%s) - start ))s"
 
       - name: Second run reuses the running instance (windows)
@@ -77,6 +78,6 @@ jobs:
         run: |
           $env:PATH = "C:\Windows\System32;C:\Windows"
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          & .\target\release\hodis.exe "cargo build"
+          & .\target\release\hodis.exe --provider searxng "cargo build"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "reuse took $($sw.Elapsed.TotalSeconds)s"

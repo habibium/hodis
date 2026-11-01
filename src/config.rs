@@ -16,11 +16,11 @@ use serde::de::value::SeqAccessDeserializer;
 use serde::de::{self, Deserializer, IntoDeserializer, SeqAccess, Visitor};
 use url::Url;
 
-use crate::Provider;
 use crate::output::{ColorWhen, OutputFormat};
 use crate::providers::duckduckgo::DUCKDUCKGO_BASE_URL;
 use crate::providers::searxng::SEARXNG_BASE_URL;
 use crate::providers::serper::SERPER_BASE_URL;
+use crate::{Provider, Providers};
 
 /// Environment variable naming a config file to read instead of the default.
 pub const CONFIG_ENV: &str = "HODIS_CONFIG";
@@ -32,8 +32,7 @@ const DEFAULT_CACHE_TTL: Duration = Duration::from_hours(1);
 /// Settings in effect.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
-    /// The providers searches go to, all at once.
-    pub providers: Vec<Provider>,
+    pub providers: Providers,
     pub format: OutputFormat,
     pub color: ColorWhen,
     /// Time allowed for a search. Providers that take longer are left out.
@@ -189,11 +188,16 @@ impl Config {
             None => Url::parse(DUCKDUCKGO_BASE_URL)?,
         };
 
-        let providers = document.provider.unwrap_or_else(|| vec![Provider::SearXNG]);
-        ensure!(
-            !providers.is_empty(),
-            "provider must name at least one provider"
-        );
+        let providers = match document.provider {
+            None => Providers::Auto,
+            Some(providers) => {
+                ensure!(
+                    !providers.is_empty(),
+                    "provider must name at least one provider"
+                );
+                Providers::Listed(providers)
+            }
+        };
 
         let config = Self {
             providers,

@@ -9,7 +9,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use url::Url;
 
 use super::input::Input;
-use crate::{Provider, SearchParams, SearchResponse, SearchResult};
+use crate::{Providers, SearchParams, SearchResponse, SearchResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
@@ -91,11 +91,11 @@ pub(crate) struct App {
     /// Counts frames of the animation shown while searching.
     pub(crate) ticks: usize,
     /// The providers searched, named before the first search.
-    pub(crate) providers: Vec<Provider>,
+    pub(crate) providers: Providers,
 }
 
 impl App {
-    pub(crate) fn new(providers: Vec<Provider>) -> Self {
+    pub(crate) fn new(providers: Providers) -> Self {
         Self {
             input: Input::default(),
             mode: Mode::Editing,
@@ -405,7 +405,7 @@ mod tests {
     use url::Url;
 
     use super::{App, Command, Mode, Notice, Shown};
-    use crate::{Diagnostics, Provider, SearchParams, SearchResponse, SearchResult};
+    use crate::{Diagnostics, Provider, Providers, SearchParams, SearchResponse, SearchResult};
 
     fn key(code: KeyCode) -> Event {
         Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
@@ -451,7 +451,7 @@ mod tests {
 
     /// An app showing `urls` as the first page of results for "rust".
     fn browsing(urls: &[&str]) -> App {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         type_text(&mut app, "rust");
         app.handle(&key(KeyCode::Enter));
         app.searched(Ok(response(urls)));
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn enter_searches_for_what_was_typed() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         type_text(&mut app, "  rust book ");
         assert_eq!(
             app.handle(&key(KeyCode::Enter)),
@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn a_blank_query_is_not_searched() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         type_text(&mut app, "   ");
         assert_eq!(app.handle(&key(KeyCode::Enter)), None);
         assert_eq!(app.mode, Mode::Editing);
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn a_failed_search_can_be_tried_again() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         type_text(&mut app, "rust");
         app.handle(&key(KeyCode::Enter));
         app.searched(Err(anyhow!("timed out")));
@@ -700,7 +700,7 @@ mod tests {
 
     #[test]
     fn quitting() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         assert_eq!(app.handle(&key(KeyCode::Esc)), Some(Command::Quit));
 
         let mut app = browsing(&THREE);
@@ -725,7 +725,7 @@ mod tests {
 
     #[test]
     fn altgr_characters_are_typed() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         app.handle(&Event::Key(KeyEvent::new(
             KeyCode::Char('@'),
             KeyModifiers::CONTROL | KeyModifiers::ALT,
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn pasting_goes_into_the_field_only_while_typing() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         app.handle(&Event::Paste("capital\nof norway".to_owned()));
         assert_eq!(app.input.text(), "capital of norway");
 
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn a_search_given_at_the_start_runs_at_once() {
-        let mut app = App::new(vec![Provider::SearXNG]);
+        let mut app = App::new(Providers::Auto);
         let command = app.search_for(SearchParams {
             query: "rust".to_owned(),
             page: NonZeroU32::new(3),

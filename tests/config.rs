@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use clap::ValueEnum;
 
-use hodis::Provider;
 use hodis::config::Config;
 use hodis::output::{ColorWhen, OutputFormat};
+use hodis::{Provider, Providers};
 
 fn parse(text: &str) -> Config {
     Config::parse(text).expect("the config is valid").config
@@ -23,7 +23,7 @@ fn an_empty_file_keeps_every_default() {
     let loaded = Config::parse("").expect("an empty file is valid");
 
     let config = loaded.config;
-    assert_eq!(config.providers, [Provider::SearXNG]);
+    assert_eq!(config.providers, Providers::Auto);
     assert_eq!(config.format, OutputFormat::Pretty);
     assert_eq!(config.color, ColorWhen::Auto);
     assert_eq!(config.timeout, Duration::from_secs(10));
@@ -64,7 +64,7 @@ fn every_setting_is_read() {
 
     assert_eq!(config.cache_ttl, Duration::from_secs(90));
 
-    assert_eq!(config.providers, [Provider::Serper]);
+    assert_eq!(config.providers, Providers::Listed(vec![Provider::Serper]));
     assert_eq!(config.format, OutputFormat::Json);
     assert_eq!(config.color, ColorWhen::Never);
     assert_eq!(config.timeout, Duration::from_secs(3));
@@ -92,7 +92,10 @@ fn values_are_spelled_as_on_the_command_line() {
             .to_possible_value()
             .expect("only offered providers are listed");
         let name = flag.get_name();
-        assert_eq!(parse(&format!("provider = '{name}'")).providers, [provider]);
+        assert_eq!(
+            parse(&format!("provider = '{name}'")).providers,
+            Providers::Listed(vec![provider])
+        );
     }
     for &color in ColorWhen::value_variants() {
         let flag = color
@@ -157,7 +160,7 @@ fn a_cache_ttl_of_zero_is_kept_to_turn_the_cache_off() {
 fn a_list_of_providers_keeps_its_order() {
     assert_eq!(
         parse("provider = ['serper', 'searxng']").providers,
-        [Provider::Serper, Provider::SearXNG]
+        Providers::Listed(vec![Provider::Serper, Provider::SearXNG])
     );
 }
 
