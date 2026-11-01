@@ -5,6 +5,7 @@ pub mod keys;
 pub mod mcp;
 pub mod output;
 pub mod providers;
+pub mod tui;
 
 use std::num::NonZeroU32;
 
@@ -108,7 +109,7 @@ pub(crate) fn drop_format(schema: &mut schemars::Schema) {
     schema.remove("format");
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchParams {
     pub query: String,
     pub page: Option<NonZeroU32>,

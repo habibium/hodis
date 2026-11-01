@@ -1,0 +1,12 @@
+---
+source: src/tui/view.rs
+expression: "drawn(&mut after(Ok(empty)), 60, 8, true).backend()"
+---
+"╭ hodis ───────────────────────────────────────────────────╮"
+"│ dns lookup                                               │"
+"╰──────────────────────────────────────────────────────────╯"
+"                                                            "
+"  No results for “dns lookup”.                              "
+"                                                            "
+" Page 1 · 0 results · SearXNG                               "
+" / search  r search again  q quit                           "

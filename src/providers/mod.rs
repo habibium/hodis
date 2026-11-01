@@ -4,7 +4,7 @@ pub mod serper;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures::future::join_all;
 use reqwest::Client;
 use tokio::time::{Instant, timeout_at};
@@ -94,6 +94,24 @@ pub async fn search(
         })
         .collect();
     Ok(merge(params.query.clone(), answered, failed))
+}
+
+/// Sets up the engine hodis runs itself when searching `providers` would need
+/// it, reporting the steps to `progress`. A search does this too, but setting
+/// up lets uv write to the terminal, which a full-screen interface must do
+/// before it takes the screen over.
+pub async fn prepare(
+    providers: &[Provider],
+    config: &Config,
+    client: &Client,
+    progress: &mut impl Write,
+) -> Result<()> {
+    if providers.contains(&Provider::SearXNG) {
+        searxng_url(client, &config.searxng, progress)
+            .await
+            .with_context(|| format!("cannot search {}", Provider::SearXNG.name()))?;
+    }
+    Ok(())
 }
 
 /// `provider`, set up as `config` says and ready to search. Steps taken to set

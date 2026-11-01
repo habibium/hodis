@@ -1,0 +1,12 @@
+---
+source: src/tui/view.rs
+expression: "drawn(&mut app, 60, 8, true).backend()"
+---
+"╭ hodis ───────────────────────────────────────────────────╮"
+"│ dns lookup                                               │"
+"╰──────────────────────────────────────────────────────────╯"
+"                                                            "
+"  error: cannot search SearXNG: no answer within 10s        "
+"                                                            "
+"                                                            "
+" / search  r search again  q quit                           "

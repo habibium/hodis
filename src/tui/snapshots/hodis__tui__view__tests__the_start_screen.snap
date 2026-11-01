@@ -1,0 +1,12 @@
+---
+source: src/tui/view.rs
+expression: terminal.backend()
+---
+"╭ hodis ───────────────────────────────────────────────────╮"
+"│ Search the web                                           │"
+"╰──────────────────────────────────────────────────────────╯"
+"                                                            "
+"                                                            "
+"                                                            "
+" Searches go to SearXNG                                     "
+" enter search  esc quit                                     "

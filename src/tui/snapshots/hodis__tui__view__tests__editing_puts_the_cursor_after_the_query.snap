@@ -1,0 +1,12 @@
+---
+source: src/tui/view.rs
+expression: terminal.backend()
+---
+"╭ hodis ───────────────────────────────────────────────────╮"
+"│ dns lookup                                               │"
+"╰──────────────────────────────────────────────────────────╯"
+"                                                            "
+"▌ 1. DNS Lookup Tool - DNS Tools - MxToolbox [google cse]   "
+"▌ https://mxtoolbox.com/DNSLookup.aspx                      "
+" Page 1 · 3 results · SearXNG · unresponsive engines: brave "
+" enter search  esc back  ctrl-c quit                        "

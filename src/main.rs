@@ -4,8 +4,8 @@ use std::{
 };
 
 use anstream::{AutoStream, ColorChoice};
-use anyhow::{Context, Result};
-use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use anyhow::{Context, Result, ensure};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, error::ErrorKind};
 use reqwest::Client;
 
 use hodis::{
@@ -15,7 +15,7 @@ use hodis::{
     keys::{ApiKey, Keychain, KeyedProvider},
     mcp,
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers,
+    providers, tui,
 };
 
 #[derive(Parser)]
@@ -34,9 +34,11 @@ struct Cli {
 
 #[derive(Args)]
 struct Search {
-    /// Your search query
-    #[arg(required = true)]
+    /// Your search query (leave it out in a terminal to search interactively)
     query: Vec<String>,
+    /// Search in a full-screen interface, starting with the query if given
+    #[arg(short, long, conflicts_with = "format")]
+    interactive: bool,
     /// Result page number (starts at 1)
     #[arg(short, long, value_name = "NUMBER")]
     page: Option<NonZeroU32>,
@@ -48,7 +50,7 @@ struct Search {
     #[arg(long)]
     no_cache: bool,
     /// Output format (default: pretty)
-    #[arg(short, long, value_enum)]
+    #[arg(short, long, value_enum, requires = "query")]
     format: Option<OutputFormat>,
     /// When to use colors (default: auto)
     #[arg(long, value_name = "WHEN", value_enum)]
@@ -132,8 +134,29 @@ async fn main() -> Result<()> {
                 .serve_stdio()
                 .await
         }
+        None if cli.search.interactive || cli.search.query.is_empty() => {
+            interactive(cli.search, config, &mut err).await
+        }
         None => search(cli.search, config, &mut err).await,
     }
+}
+
+async fn interactive(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
+    ensure!(
+        can_draw(),
+        "the interactive search needs a terminal on standard input and output"
+    );
+    let providers = if args.provider.is_empty() {
+        config.providers.clone()
+    } else {
+        args.provider
+    };
+    let cache = open_cache(config.cache_ttl, args.no_cache);
+    let first = (!args.query.is_empty()).then(|| SearchParams {
+        query: args.query.join(" "),
+        page: args.page,
+    });
+    tui::run(config, providers, cache, first, err).await
 }
 
 async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
@@ -146,13 +169,7 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     } else {
         &args.provider
     };
-    let cache = Cache::open(config.cache_ttl).map(|cache| {
-        if args.no_cache {
-            cache.without_reads()
-        } else {
-            cache
-        }
-    });
+    let cache = open_cache(config.cache_ttl, args.no_cache);
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
@@ -170,6 +187,17 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
+}
+
+/// The cache, still kept up to date but not read from if `no_cache`.
+fn open_cache(ttl: std::time::Duration, no_cache: bool) -> Option<Cache> {
+    Cache::open(ttl).map(|cache| {
+        if no_cache {
+            cache.without_reads()
+        } else {
+            cache
+        }
+    })
 }
 
 fn manage_key(command: KeyCommand, err: &mut impl Write) -> Result<()> {
@@ -238,7 +266,36 @@ fn parse_args() -> Cli {
     if let Some(path) = config::path() {
         command = command.after_help(format!("Config file: {}", path.display()));
     }
-    Cli::from_arg_matches(&command.get_matches()).unwrap_or_else(|e| e.exit())
+    let cli = Cli::from_arg_matches(&command.get_matches_mut()).unwrap_or_else(|e| e.exit());
+    if let Err(e) = require_query(&cli, &mut command, can_draw()) {
+        e.exit();
+    }
+    cli
+}
+
+/// A search without a query is interactive, which only a terminal can show.
+fn require_query(
+    cli: &Cli,
+    command: &mut clap::Command,
+    terminal: bool,
+) -> Result<(), clap::Error> {
+    if cli.command.is_none() && cli.search.query.is_empty() && !cli.search.interactive && !terminal
+    {
+        return Err(command.error(
+            ErrorKind::MissingRequiredArgument,
+            "a search query is required when not run in a terminal",
+        ));
+    }
+    Ok(())
+}
+
+/// Whether the interactive search can run: it reads keys from standard input,
+/// draws on standard output, and moves the cursor, which a dumb terminal
+/// cannot.
+fn can_draw() -> bool {
+    io::stdin().is_terminal()
+        && io::stdout().is_terminal()
+        && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
 }
 
 #[cfg(test)]
@@ -247,7 +304,7 @@ mod tests {
 
     use hodis::Provider;
 
-    use super::{Cli, Command, KeyCommand, KeyedProvider};
+    use super::{Cli, Command, KeyCommand, KeyedProvider, require_query};
 
     fn parse(args: &[&str]) -> Cli {
         Cli::try_parse_from([&["hodis"], args].concat()).expect("the arguments parse")
@@ -329,8 +386,33 @@ mod tests {
     }
 
     #[test]
-    fn a_query_is_still_required_without_a_command() {
-        assert!(Cli::try_parse_from(["hodis"]).is_err());
+    fn a_query_is_required_outside_a_terminal() {
+        let bare = parse(&[]);
+        assert!(require_query(&bare, &mut Cli::command(), false).is_err());
+        assert!(require_query(&bare, &mut Cli::command(), true).is_ok());
+        assert!(require_query(&parse(&["rust"]), &mut Cli::command(), false).is_ok());
+        assert!(
+            require_query(
+                &parse(&["key", "delete", "serper"]),
+                &mut Cli::command(),
+                false
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_format_needs_a_query_to_format() {
         assert!(Cli::try_parse_from(["hodis", "--format", "json"]).is_err());
+    }
+
+    #[test]
+    fn the_interactive_search_takes_an_optional_query() {
+        let cli = parse(&["-i"]);
+        assert!(cli.search.interactive && cli.search.query.is_empty());
+        let cli = parse(&["--interactive", "rust", "book"]);
+        assert!(cli.search.interactive);
+        assert_eq!(cli.search.query, ["rust", "book"]);
+        assert!(Cli::try_parse_from(["hodis", "-i", "--format", "json", "rust"]).is_err());
     }
 }

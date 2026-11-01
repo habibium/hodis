@@ -1,0 +1,12 @@
+---
+source: src/tui/view.rs
+expression: "drawn(&mut searching(), 60, 8, true).backend()"
+---
+"╭ hodis ───────────────────────────────────────────────────╮"
+"│ dns lookup                                               │"
+"╰──────────────────────────────────────────────────────────╯"
+"                                                            "
+"                                                            "
+"                                                            "
+" ⠋ Searching for “dns lookup”                               "
+" / search  q quit                                           "
