@@ -36,6 +36,7 @@ which needs `tar`. macOS, Windows 10 and later, and most Linux systems ship it.
 hodis rust borrow checker                # every word is part of the query
 hodis --page 2 rust borrow checker
 hodis --format urls rust borrow checker
+hodis --no-cache rust borrow checker     # search afresh, past the cache
 hodis -- key                             # search for a word that is a hodis command
 ```
 
@@ -51,6 +52,10 @@ hodis -- key                             # search for a word that is a hodis com
 default, it is styled only in a terminal, and never when `NO_COLOR` is set.
 Warnings, such as a list of engines that did not answer, go to stderr and stay
 out of the results.
+
+hodis keeps each search's results for an hour, so repeating a search is
+instant and costs no Serper credit. `--no-cache` searches afresh and keeps the
+new results.
 
 ## Providers
 
@@ -89,6 +94,20 @@ hodis never writes the key to a file. Where there is no keychain, set
 `hodis key delete serper` removes the stored key, and `provider = "serper"` in
 the config file makes Serper the default.
 
+### Several at once
+
+```sh
+hodis --provider searxng,serper rust borrow checker
+```
+
+Naming several providers searches them all at once and merges what they find.
+A page that more than one provider ranks well comes first, and each page is
+listed once. The answer, if any, comes from the first provider named that has
+one. A provider that fails, or that has not answered when `timeout` runs out,
+is left out with a warning; only a search that every provider fails is an
+error. A list in the config file, such as `provider = ["searxng", "serper"]`,
+does the same for every search.
+
 ## Configuration
 
 The config file is `~/.config/hodis/config.toml` on Linux and macOS and
@@ -97,10 +116,10 @@ The config file is `~/.config/hodis/config.toml` on Linux and macOS and
 override the file. These are the defaults:
 
 ```toml
-provider = "searxng"   # or "serper"
+provider = "searxng"   # "serper", or a list such as ["searxng", "serper"]
 format = "pretty"      # pretty, json, markdown, plain or urls
 color = "auto"         # auto, always or never
-timeout = 10           # seconds allowed for each search request
+timeout = 10           # seconds a search may take before late providers are left out
 
 [searxng]
 url = "http://localhost:8888/"
@@ -108,6 +127,9 @@ embedded = true        # set up hodis's own instance when nothing answers at url
 
 [serper]
 url = "https://google.serper.dev/"   # only a proxy in front of Serper needs another
+
+[cache]
+ttl = 3600             # seconds results are reused; 0 turns the cache off
 ```
 
 hodis warns about keys it does not know, such as a misspelled one.
@@ -120,29 +142,38 @@ retyped, and the minor part when one is added.
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "query": "capital of norway",
-  "answer": null,
+  "answer": {
+    "url": null,
+    "content": "Oslo",
+    "provider": "serper"
+  },
   "results": [
     {
       "title": "Oslo - Wikipedia",
       "url": "https://en.wikipedia.org/wiki/Oslo",
       "snippet": "Oslo is the capital and largest city of Norway.",
       "image": null,
-      "source": "google"
+      "source": "google",
+      "provider": "serper"
     }
   ],
-  "provider": "searxng",
+  "providers": ["serper", "searxng"],
   "diagnostics": {
+    "failed_providers": [],
     "unresponsive_engines": [{ "engine": "brave", "reason": "too many requests" }],
     "skipped_results": 0
   }
 }
 ```
 
-`answer` holds a `url` and `content` when the search has a direct answer, such
-as a fact or a definition. `diagnostics` lists the engines that did not answer
-and counts the results dropped for lacking a title or a valid URL.
+`answer` is `null` unless the search has a direct answer, such as a fact or a
+definition. `source` names the engine behind a result and `provider` the
+provider that returned it; `providers` lists the providers that answered.
+`diagnostics` lists the providers that failed or ran out of time and the
+engines that did not answer, and counts the results dropped for lacking a
+title or a valid URL.
 
 ## AI agents
 
@@ -168,9 +199,10 @@ like this:
 ```
 
 `hodis mcp --provider serper` gives agents Google results while your own
-searches stay on SearXNG. If hodis is going to set up its own SearXNG, run one
-search in a terminal first: the setup can take longer than a client waits for a
-tool.
+searches stay on SearXNG, and `--provider searxng,serper` gives them both.
+Agents share the cache with your own searches. If hodis is going to set up its
+own SearXNG, run one search in a terminal first: the setup can take longer than
+a client waits for a tool.
 
 ## Files
 
@@ -184,6 +216,11 @@ kill "$(cat ~/.local/share/hodis/engine/searxng.pid)"
 ```
 
 Once it has stopped, deleting the data directory removes it altogether.
+
+Cached results live in `searches` under hodis's cache directory:
+`~/.cache/hodis` on Linux and macOS, `%LOCALAPPDATA%\hodis` on Windows, or
+wherever `HODIS_CACHE_DIR` points. Deleting it costs nothing but the speed of
+the next few searches.
 
 ## License
 
