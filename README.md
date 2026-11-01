@@ -24,11 +24,29 @@ Its capital and largest city is Oslo. The country shares a long eastern border w
 
 ## Install
 
-hodis has no releases yet. Install it from source with Rust 1.96 or newer:
+On Linux or macOS:
 
 ```sh
-cargo install --git https://github.com/habibium/hodis
+curl -fsSL https://github.com/habibium/hodis/releases/latest/download/hodis-installer.sh | sh
 ```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://github.com/habibium/hodis/releases/latest/download/hodis-installer.ps1 | iex
+```
+
+The scripts check the download against its checksum and install hodis into
+`~/.local/bin`, or on Windows into `%LOCALAPPDATA%\Programs\hodis`, which they
+put on your PATH. `HODIS_INSTALL_DIR` picks another directory and
+`HODIS_VERSION`, such as `v0.1.0`, another release. The
+[releases page](https://github.com/habibium/hodis/releases) has the archives
+themselves: static builds for Linux on x86_64 and ARM, macOS on Intel and Apple
+silicon, and Windows on x64. hodis is not signed, so macOS refuses to run a copy
+downloaded in a browser until `xattr -d com.apple.quarantine hodis` clears it;
+the install script avoids that.
+
+With Rust 1.96 or newer, `cargo install hodis` builds it from crates.io.
 
 Searching needs nothing else. Setting up hodis's own SearXNG, if you choose
 that, needs `tar`, which macOS, Windows 10 and later, and most Linux systems

@@ -1,12 +1,14 @@
 [package]
 name = "hodis"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
+rust-version = "1.96"
 description = "Websearch tool for humans and AI"
 repository = "https://github.com/habibium/hodis"
 license = "MIT"
 keywords = ["cli", "search", "web"]
 categories = ["command-line-utilities"]
+exclude = [".github/", "scripts/", "bacon.toml"]
 
 [dependencies]
 anstream = "1"
