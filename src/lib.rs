@@ -29,6 +29,18 @@ pub enum Provider {
     Serper,
 }
 
+impl Provider {
+    /// The name messages use.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::DuckDuckGo => "DuckDuckGo",
+            Self::SearXNG => "SearXNG",
+            Self::Serper => "Serper",
+        }
+    }
+}
+
 // Field docs double as descriptions in the `json` format's schema, so each
 // stays on one line: a line break would land in the description.
 
@@ -39,18 +51,27 @@ pub struct SearchResponse {
     pub answer: Option<Answer>,
     /// Best first.
     pub results: Vec<SearchResult>,
-    pub provider: Provider,
+    /// The providers that answered, in the order they were asked.
+    pub providers: Vec<Provider>,
     /// What went wrong without stopping the search.
     pub diagnostics: Diagnostics,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Default, JsonSchema)]
 pub struct Diagnostics {
+    /// Providers that failed or ran out of time, so their results are missing.
+    pub failed_providers: Vec<ProviderIssue>,
     /// Engines that did not answer, so their results are missing.
     pub unresponsive_engines: Vec<EngineIssue>,
     /// Results dropped for lacking a title or a valid URL.
     #[schemars(transform = drop_format)]
     pub skipped_results: usize,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
+pub struct ProviderIssue {
+    pub provider: Provider,
+    pub reason: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
@@ -69,6 +90,7 @@ pub struct SearchResult {
     pub image: Option<Url>,
     /// The engine that found the result, such as `google`, possibly empty.
     pub source: String,
+    pub provider: Provider,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, JsonSchema)]
@@ -76,6 +98,7 @@ pub struct Answer {
     /// The page the answer comes from, when known.
     pub url: Option<Url>,
     pub content: String,
+    pub provider: Provider,
 }
 
 /// For `#[schemars(transform)]` on an integer: JSON Schema defines no formats

@@ -22,7 +22,13 @@ fn parse(body: &str) -> anyhow::Result<SearchResponse> {
 fn organic_results_become_results_from_google() -> anyhow::Result<()> {
     let response = parse(HEALTHY_BODY)?;
 
-    assert_eq!(response.provider, Provider::Serper);
+    assert_eq!(response.providers, [Provider::Serper]);
+    assert!(
+        response
+            .results
+            .iter()
+            .all(|r| r.provider == Provider::Serper)
+    );
     assert_eq!(response.query, "capital of norway");
     assert_eq!(response.results.len(), 3);
     let first = &response.results[0];
@@ -47,6 +53,7 @@ fn a_short_answer_in_the_answer_box_is_the_answer() -> anyhow::Result<()> {
         Some(Answer {
             url: None,
             content: "Oslo".to_owned(),
+            provider: Provider::Serper,
         })
     );
     Ok(())
@@ -69,6 +76,7 @@ fn an_answer_box_quoting_a_page_answers_with_its_link() -> anyhow::Result<()> {
                 "https://en.wikipedia.org/wiki/Rust_(programming_language)"
             )?),
             content: "Rust is a general-purpose programming language.".to_owned(),
+            provider: Provider::Serper,
         })
     );
     Ok(())

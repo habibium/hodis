@@ -163,7 +163,7 @@ async fn the_provider_flag_overrides_the_config() -> anyhow::Result<()> {
     client.cancel().await?;
 
     let content = result.structured_content.expect("a structured result");
-    assert_eq!(content["provider"], "serper");
+    assert_eq!(content["providers"], json!(["serper"]));
     assert_eq!(content["answer"]["content"], "Oslo");
     Ok(())
 }

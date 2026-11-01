@@ -90,6 +90,7 @@ impl SerperProvider {
                     image,
                     snippet: r.snippet.unwrap_or_default(),
                     source: SOURCE.to_owned(),
+                    provider: Provider::Serper,
                 })
             })
             .collect();
@@ -103,6 +104,7 @@ impl SerperProvider {
             Some(Answer {
                 url: a.link.as_deref().and_then(|u| Url::parse(u).ok()),
                 content,
+                provider: Provider::Serper,
             })
         });
 
@@ -110,10 +112,10 @@ impl SerperProvider {
             query: query.to_owned(),
             answer,
             results,
-            provider: Provider::Serper,
+            providers: vec![Provider::Serper],
             diagnostics: Diagnostics {
-                unresponsive_engines: Vec::new(),
                 skipped_results: skipped,
+                ..Diagnostics::default()
             },
         })
     }

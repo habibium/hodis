@@ -7,7 +7,7 @@ use anstream::adapter::strip_str;
 use url::Url;
 
 use hodis::{
-    Answer, Diagnostics, EngineIssue, Provider, SearchResponse, SearchResult,
+    Answer, Diagnostics, EngineIssue, Provider, ProviderIssue, SearchResponse, SearchResult,
     output::{OutputFormat, render, render_diagnostics, render_warning},
 };
 
@@ -19,6 +19,7 @@ fn answer(content: &str, url: Option<&str>) -> Answer {
     Answer {
         url: url.map(parse_url),
         content: content.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -29,6 +30,7 @@ fn search_result(title: &str, url: &str, snippet: &str, source: &str) -> SearchR
         snippet: snippet.to_owned(),
         image: None,
         source: source.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -37,7 +39,7 @@ fn response(answer: Option<Answer>, results: Vec<SearchResult>) -> SearchRespons
         query: "test query".to_owned(),
         answer,
         results,
-        provider: Provider::SearXNG,
+        providers: vec![Provider::SearXNG],
         diagnostics: Diagnostics::default(),
     }
 }
@@ -190,6 +192,7 @@ fn clean_diagnostics_render_nothing() {
 #[test]
 fn the_skipped_result_count_is_pluralized() {
     let one = unstyled_diagnostics(&Diagnostics {
+        failed_providers: Vec::new(),
         unresponsive_engines: Vec::new(),
         skipped_results: 1,
     });
@@ -197,6 +200,7 @@ fn the_skipped_result_count_is_pluralized() {
     assert!(!one.contains("malformed results"));
 
     let many = unstyled_diagnostics(&Diagnostics {
+        failed_providers: Vec::new(),
         unresponsive_engines: Vec::new(),
         skipped_results: 2,
     });
@@ -206,6 +210,7 @@ fn the_skipped_result_count_is_pluralized() {
 #[test]
 fn unresponsive_engines_are_comma_separated() {
     let text = unstyled_diagnostics(&Diagnostics {
+        failed_providers: Vec::new(),
         unresponsive_engines: vec![
             engine_issue("brave", "CAPTCHA"),
             engine_issue("mojeek", "timeout"),
@@ -220,6 +225,22 @@ fn unresponsive_engines_are_comma_separated() {
     assert_eq!(
         line,
         "warning: unresponsive engines: brave (CAPTCHA), mojeek (timeout)"
+    );
+}
+
+#[test]
+fn each_failed_provider_gets_a_warning_with_its_reason() {
+    let text = unstyled_diagnostics(&Diagnostics {
+        failed_providers: vec![ProviderIssue {
+            provider: Provider::Serper,
+            reason: "no answer\nwithin 10s".to_owned(),
+        }],
+        ..Diagnostics::default()
+    });
+
+    assert_eq!(
+        text,
+        "\nwarning: cannot search Serper: no answer within 10s\n"
     );
 }
 

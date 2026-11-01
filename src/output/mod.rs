@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Diagnostics, SearchResponse};
 
-const SCHEMA_VERSION: &str = "1.0.0";
+const SCHEMA_VERSION: &str = "2.0.0";
 
 const ANSWER: Style = Style::new().bold();
 const SOURCE: Style = Style::new().dimmed();
@@ -173,11 +173,23 @@ pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> 
 }
 
 pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io::Result<()> {
-    if diagnostics.skipped_results == 0 && diagnostics.unresponsive_engines.is_empty() {
+    if diagnostics.failed_providers.is_empty()
+        && diagnostics.skipped_results == 0
+        && diagnostics.unresponsive_engines.is_empty()
+    {
         return Ok(());
     }
 
     writeln!(out)?;
+
+    for issue in &diagnostics.failed_providers {
+        writeln!(
+            out,
+            "{WARN}warning:{WARN:#} {DIAG_TEXT}cannot search {}: {}{DIAG_TEXT:#}",
+            issue.provider.name(),
+            one_line(&issue.reason)
+        )?;
+    }
 
     if !diagnostics.unresponsive_engines.is_empty() {
         write!(

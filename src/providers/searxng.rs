@@ -69,6 +69,7 @@ impl SearXNGProvider {
                     image,
                     snippet: r.content.unwrap_or_default(),
                     source: r.engine.unwrap_or_default(),
+                    provider: Provider::SearXNG,
                 })
             })
             .collect();
@@ -81,6 +82,7 @@ impl SearXNGProvider {
             .map(|a| Answer {
                 url: a.url.as_deref().and_then(|u| Url::parse(u).ok()),
                 content: a.answer,
+                provider: Provider::SearXNG,
             });
 
         let unresponsive_engines = wire
@@ -99,10 +101,11 @@ impl SearXNGProvider {
             query: query.to_string(),
             answer,
             results,
-            provider: Provider::SearXNG,
+            providers: vec![Provider::SearXNG],
             diagnostics: Diagnostics {
                 unresponsive_engines,
                 skipped_results: skipped,
+                ..Diagnostics::default()
             },
         })
     }

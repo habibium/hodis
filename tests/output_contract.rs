@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use url::Url;
 
 use hodis::{
-    Answer, Diagnostics, EngineIssue, Provider, SearchProvider, SearchResponse, SearchResult,
+    Answer, Diagnostics, EngineIssue, Provider, ProviderIssue, SearchProvider, SearchResponse,
+    SearchResult,
     output::{OutputFormat, Versioned, render},
 };
 
@@ -18,13 +19,14 @@ fn json_output(response: &SearchResponse) -> anyhow::Result<Value> {
     Ok(serde_json::from_slice(&out)?)
 }
 
-/// A response with an answer, a result and diagnostics.
+/// A response with an answer, a result, and diagnostics of every kind.
 fn full_response() -> anyhow::Result<SearchResponse> {
     Ok(SearchResponse {
         query: "capital of norway".to_owned(),
         answer: Some(Answer {
             url: Some(Url::parse("https://en.wikipedia.org/wiki/Oslo")?),
             content: "Oslo is the capital of Norway.".to_owned(),
+            provider: Provider::SearXNG,
         }),
         results: vec![SearchResult {
             title: "Oslo - Wikipedia".to_owned(),
@@ -32,9 +34,14 @@ fn full_response() -> anyhow::Result<SearchResponse> {
             snippet: "Oslo is the capital and most populous city of Norway.".to_owned(),
             image: None,
             source: "wikipedia".to_owned(),
+            provider: Provider::SearXNG,
         }],
-        provider: Provider::SearXNG,
+        providers: vec![Provider::SearXNG],
         diagnostics: Diagnostics {
+            failed_providers: vec![ProviderIssue {
+                provider: Provider::Serper,
+                reason: "no answer within 10s".to_owned(),
+            }],
             unresponsive_engines: vec![EngineIssue {
                 engine: "brave".to_owned(),
                 reason: "too many requests".to_owned(),
@@ -47,21 +54,26 @@ fn full_response() -> anyhow::Result<SearchResponse> {
 #[test]
 fn json_output_has_the_frozen_shape() -> anyhow::Result<()> {
     let expected = json!({
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "query": "capital of norway",
         "answer": {
             "url": "https://en.wikipedia.org/wiki/Oslo",
-            "content": "Oslo is the capital of Norway."
+            "content": "Oslo is the capital of Norway.",
+            "provider": "searxng"
         },
         "results": [{
             "title": "Oslo - Wikipedia",
             "url": "https://en.wikipedia.org/wiki/Oslo",
             "snippet": "Oslo is the capital and most populous city of Norway.",
             "image": null,
-            "source": "wikipedia"
+            "source": "wikipedia",
+            "provider": "searxng"
         }],
-        "provider": "searxng",
+        "providers": ["searxng"],
         "diagnostics": {
+            "failed_providers": [
+                { "provider": "serper", "reason": "no answer within 10s" }
+            ],
             "unresponsive_engines": [
                 { "engine": "brave", "reason": "too many requests" }
             ],
@@ -105,7 +117,7 @@ fn an_absent_answer_is_null_rather_than_missing() -> anyhow::Result<()> {
         query: "no answer".to_owned(),
         answer: None,
         results: Vec::new(),
-        provider: Provider::SearXNG,
+        providers: vec![Provider::SearXNG],
         diagnostics: Diagnostics::default(),
     };
 

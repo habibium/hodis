@@ -15,6 +15,7 @@ fn answer(content: &str, url: Option<&str>) -> Answer {
     Answer {
         url: url.map(parse_url),
         content: content.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -25,6 +26,7 @@ fn search_result(title: &str, url: &str, snippet: &str, source: &str) -> SearchR
         snippet: snippet.to_owned(),
         image: None,
         source: source.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -33,7 +35,7 @@ fn response(answer: Option<Answer>, results: Vec<SearchResult>) -> SearchRespons
         query: "test query".to_owned(),
         answer,
         results,
-        provider: Provider::SearXNG,
+        providers: vec![Provider::SearXNG],
         diagnostics: Diagnostics::default(),
     }
 }

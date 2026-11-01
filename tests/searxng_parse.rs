@@ -16,7 +16,8 @@ fn healthy_response_keeps_all_results_and_the_answer() -> anyhow::Result<()> {
     let r = provider().parse_body("dns lookup", include_str!("fixtures/healthy.json"))?;
 
     assert_eq!(r.query, "dns lookup");
-    assert_eq!(r.provider, Provider::SearXNG);
+    assert_eq!(r.providers, [Provider::SearXNG]);
+    assert!(r.results.iter().all(|r| r.provider == Provider::SearXNG));
     assert_eq!(r.results.len(), 3);
     assert_eq!(r.diagnostics.skipped_results, 0);
 

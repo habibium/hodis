@@ -19,6 +19,7 @@ fn answer(content: &str, url: Option<&str>) -> Answer {
     Answer {
         url: url.map(parse_url),
         content: content.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -29,6 +30,7 @@ fn search_result(title: &str, url: &str, snippet: &str, source: &str) -> SearchR
         snippet: snippet.to_owned(),
         image: None,
         source: source.to_owned(),
+        provider: Provider::SearXNG,
     }
 }
 
@@ -37,7 +39,7 @@ fn response(answer: Option<Answer>, results: Vec<SearchResult>) -> SearchRespons
         query: "rust ownership".to_owned(),
         answer,
         results,
-        provider: Provider::SearXNG,
+        providers: vec![Provider::SearXNG],
         diagnostics: Diagnostics::default(),
     }
 }
@@ -167,6 +169,7 @@ fn minimal_result() {
 #[test]
 fn diagnostics_with_engines_and_skips() {
     let rendered = unstyled_diagnostics(&Diagnostics {
+        failed_providers: Vec::new(),
         unresponsive_engines: vec![
             engine_issue("brave", "CAPTCHA"),
             engine_issue("mojeek", "timeout"),
