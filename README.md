@@ -4,8 +4,9 @@ Web search from the terminal, for people and for AI agents.
 
 hodis searches the web and prints what it finds: styled for reading in a
 terminal, or as JSON, Markdown, plain text or bare URLs for scripts and notes.
-It searches through SearXNG, either an instance you run or one hodis sets up for
-itself, or gets Google results from Serper with an API key. Run without a
+It searches DuckDuckGo with nothing to set up, or SearXNG, either an instance
+you run or one hodis sets up for itself, and gets Google results from Serper
+with an API key. Run without a
 query, it opens a full-screen search instead, for moving through results and
 opening them in your browser. `hodis mcp` offers the same search to AI agents
 as an MCP tool.
@@ -29,8 +30,9 @@ hodis has no releases yet. Install it from source with Rust 1.96 or newer:
 cargo install --git https://github.com/habibium/hodis
 ```
 
-If no SearXNG instance answers at `localhost:8888`, the first search sets one up,
-which needs `tar`. macOS, Windows 10 and later, and most Linux systems ship it.
+Searching needs nothing else. Setting up hodis's own SearXNG, if you choose
+that, needs `tar`, which macOS, Windows 10 and later, and most Linux systems
+ship.
 
 ## Searching
 
@@ -86,17 +88,28 @@ reaches your clipboard over SSH too. Not every terminal allows it; in tmux,
 
 ## Providers
 
+hodis searches SearXNG when an instance answers at `http://localhost:8888/`, or
+at the address the config file gives, and DuckDuckGo otherwise, so searching
+needs nothing installed. `--provider`, or `provider` in the config file,
+chooses for itself.
+
+### DuckDuckGo
+
+```sh
+hodis --provider duckduckgo rust borrow checker
+```
+
+DuckDuckGo offers no search API, so hodis reads the results page it serves to
+browsers without JavaScript, as SearXNG does. It needs no key and no setup, and
+its results come without a direct answer. DuckDuckGo turns away searches it
+takes for a bot's with a CAPTCHA, which hodis reports as an error; searching
+again later, or through SearXNG, gets past it.
+
 ### SearXNG
 
 [SearXNG](https://docs.searxng.org) is a free metasearch engine: it queries
-other search engines and merges their results. hodis looks for an instance at
-`http://localhost:8888/`. If nothing answers there, hodis installs one of its
-own: the first time, it downloads a Python interpreter and SearXNG, a few
-hundred megabytes, into its data directory. Later searches reuse that instance,
-which listens on 127.0.0.1 only and keeps running between searches.
-
-To use another instance, name it in the config file. Setting `url` turns off
-hodis's own instance unless `embedded = true` is set as well.
+other search engines and merges their results. hodis uses an instance at
+`http://localhost:8888/`, or the one the config file names:
 
 ```toml
 [searxng]
@@ -105,6 +118,14 @@ url = "https://searxng.example.org/"
 
 The instance must serve JSON, which public instances often refuse: `json` has
 to be listed under `search.formats` in its `settings.yml`.
+
+hodis can also run an instance of its own. Choose SearXNG with
+`--provider searxng` or `provider = "searxng"`, and if nothing answers at
+`localhost:8888`, hodis installs one: the first time, it downloads a Python
+interpreter and SearXNG, a few hundred megabytes, into its data directory.
+Later searches reuse that instance, which listens on 127.0.0.1 only and keeps
+running between searches. Setting `url` turns this off unless
+`embedded = true` is set as well.
 
 ### Serper
 
@@ -143,14 +164,18 @@ The config file is `~/.config/hodis/config.toml` on Linux and macOS and
 override the file. These are the defaults:
 
 ```toml
-provider = "searxng"   # "serper", or a list such as ["searxng", "serper"]
+# provider: unset, SearXNG when it answers at its url and DuckDuckGo otherwise;
+# or "searxng", "duckduckgo", "serper", or a list such as ["searxng", "serper"]
 format = "pretty"      # pretty, json, markdown, plain or urls
 color = "auto"         # auto, always or never
 timeout = 10           # seconds a search may take before late providers are left out
 
 [searxng]
 url = "http://localhost:8888/"
-embedded = true        # set up hodis's own instance when nothing answers at url
+embedded = true        # with SearXNG chosen, set up hodis's own when nothing answers
+
+[duckduckgo]
+url = "https://html.duckduckgo.com/" # only a proxy in front of DuckDuckGo needs another
 
 [serper]
 url = "https://google.serper.dev/"   # only a proxy in front of Serper needs another
@@ -226,17 +251,17 @@ like this:
 ```
 
 `hodis mcp --provider serper` gives agents Google results while your own
-searches stay on SearXNG, and `--provider searxng,serper` gives them both.
+searches use the default, and `--provider searxng,serper` gives them both.
 Agents share the cache with your own searches. If hodis is going to set up its
 own SearXNG, run one search in a terminal first: the setup can take longer than
 a client waits for a tool.
 
 ## Files
 
-hodis keeps its SearXNG instance in its data directory: `~/.local/share/hodis`
-on Linux and macOS, `%APPDATA%\hodis` on Windows, or wherever `HODIS_DATA_DIR`
-points. To stop the instance, end the process whose ID is in
-`engine/searxng.pid` there; on Linux or macOS:
+hodis keeps its own SearXNG instance, if it has set one up, in its data
+directory: `~/.local/share/hodis` on Linux and macOS, `%APPDATA%\hodis` on
+Windows, or wherever `HODIS_DATA_DIR` points. To stop the instance, end the
+process whose ID is in `engine/searxng.pid` there; on Linux or macOS:
 
 ```sh
 kill "$(cat ~/.local/share/hodis/engine/searxng.pid)"
