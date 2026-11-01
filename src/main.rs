@@ -4,18 +4,17 @@ use std::{
 };
 
 use anstream::{AutoStream, ColorChoice};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use reqwest::Client;
-use url::Url;
 
 use hodis::{
-    Provider, SearchParams, SearchProvider,
-    config::{self, Config, Loaded, SearXNG},
-    engine::{Engine, is_reachable},
-    keys::{self, ApiKey, Keychain, KeyedProvider},
+    Provider, SearchParams,
+    config::{self, Config, Loaded},
+    keys::{ApiKey, Keychain, KeyedProvider},
+    mcp,
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers::{searxng::SearXNGProvider, serper::SerperProvider},
+    providers,
 };
 
 #[derive(Parser)]
@@ -56,6 +55,16 @@ enum Command {
     /// Store or delete the API keys of providers that need one
     #[command(subcommand)]
     Key(KeyCommand),
+    /// Serve web searches to AI agents over MCP
+    ///
+    /// An MCP client, such as an AI coding agent, starts this command and talks
+    /// to it over standard input and output. Searches go to the provider the
+    /// config file chooses unless `--provider` names another.
+    Mcp {
+        /// Search provider (default: searxng)
+        #[arg(long, value_enum)]
+        provider: Option<Provider>,
+    },
 }
 
 #[derive(Clone, Copy, Subcommand)]
@@ -98,6 +107,18 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Key(command)) => manage_key(command, &mut err),
+        Some(Command::Mcp { provider }) => {
+            if io::stdin().is_terminal() {
+                render_warning(
+                    "`hodis mcp` is for an MCP client to start; it waits for the client's messages on standard input",
+                    &mut err,
+                )?;
+            }
+            // Its lock on stderr would hold up any other thread writing there.
+            drop(err);
+            let provider = provider.unwrap_or(config.provider);
+            mcp::Server::new(config, provider)?.serve_stdio().await
+        }
         None => search(cli.search, config, &mut err).await,
     }
 }
@@ -107,16 +128,8 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     let client = Client::builder().timeout(config.timeout).build()?;
     let mut out = AutoStream::auto(io::stdout().lock());
 
-    let provider: Box<dyn SearchProvider> = match args.provider.unwrap_or(config.provider) {
-        Provider::SearXNG => Box::new(SearXNGProvider {
-            base_url: searxng_url(&client, config.searxng, err).await?,
-        }),
-        Provider::Serper => Box::new(SerperProvider {
-            base_url: config.serper.url,
-            key: keys::find(KeyedProvider::Serper)?,
-        }),
-        Provider::DuckDuckGo => bail!("hodis cannot search DuckDuckGo yet"),
-    };
+    let provider = args.provider.unwrap_or(config.provider);
+    let provider = providers::connect(provider, &config, &client, err).await?;
     let params = SearchParams {
         query: args.query.join(" "),
         page: args.page,
@@ -133,17 +146,6 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
     render_diagnostics(&response.diagnostics, err)?;
 
     Ok(())
-}
-
-/// The configured instance is one the user may or may not be running; when
-/// nothing answers there, hodis falls back to the engine it runs itself, if
-/// allowed.
-async fn searxng_url(client: &Client, instance: SearXNG, progress: &mut impl Write) -> Result<Url> {
-    if !instance.embedded || is_reachable(client, &instance.url).await {
-        Ok(instance.url)
-    } else {
-        Engine::resolve()?.ensure_running(client, progress).await
-    }
 }
 
 fn manage_key(command: KeyCommand, err: &mut impl Write) -> Result<()> {
@@ -254,6 +256,20 @@ mod tests {
         let cli = parse(&["rust", "key", "set"]);
         assert!(cli.command.is_none());
         assert_eq!(cli.search.query, ["rust", "key", "set"]);
+    }
+
+    #[test]
+    fn mcp_takes_a_provider_of_its_own() {
+        assert!(matches!(
+            parse(&["mcp"]).command,
+            Some(Command::Mcp { provider: None })
+        ));
+        assert!(matches!(
+            parse(&["mcp", "--provider", "serper"]).command,
+            Some(Command::Mcp {
+                provider: Some(Provider::Serper)
+            })
+        ));
     }
 
     #[test]

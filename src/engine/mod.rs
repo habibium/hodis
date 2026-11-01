@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use reqwest::Client;
+use tokio::sync::Mutex;
 use url::Url;
 
 use crate::output::render_setup_step;
@@ -53,6 +54,10 @@ const STARTUP_POLL: Duration = Duration::from_millis(250);
 /// Tens of megabytes, so the short timeout suiting a search would not do.
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_mins(10);
 
+/// Held while making sure the engine runs, so that searches made at once by one
+/// process set up and start a single instance between them.
+static SETUP: Mutex<()> = Mutex::const_new(());
+
 /// A local health endpoint, so probing costs an upstream engine nothing.
 pub async fn is_reachable(client: &Client, base_url: &Url) -> bool {
     daemon::is_healthy(client, base_url).await
@@ -84,6 +89,7 @@ impl Engine {
     /// if needed. `progress` belongs on stderr so piped search output stays
     /// clean.
     pub async fn ensure_running(&self, client: &Client, progress: &mut impl Write) -> Result<Url> {
+        let _setup = SETUP.lock().await;
         if let Some(url) = self.running_url(client).await {
             return Ok(url);
         }
@@ -429,6 +435,7 @@ fn extract(archive: &Path, into: &Path) -> Result<()> {
         .arg("-C")
         .arg(into)
         .stdin(Stdio::null())
+        .stdout(io::stderr())
         .status()
         .with_context(|| format!("cannot run tar to unpack {}", archive.display()))?;
     ensure!(
@@ -472,7 +479,10 @@ fn run(command: &mut Command, what: &str) -> Result<()> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{Paths, SEARXNG_REV, SEARXNG_VERSION, provision_marker, pwd_stub, version_frozen};
+    use super::{
+        Engine, Paths, SEARXNG_REV, SEARXNG_VERSION, provision_marker, pwd_stub, settings,
+        version_frozen,
+    };
 
     #[test]
     fn the_frozen_version_defines_every_name_searxng_unpacks() {
@@ -617,5 +627,64 @@ mod tests {
             10,
             "five quoted values and nothing needing escapes:\n{frozen}"
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn searches_made_at_once_start_one_instance() -> anyhow::Result<()> {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::time::Duration;
+
+        use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
+
+        let scratch = tempfile::tempdir()?;
+        let engine = Engine::new(Paths::new(scratch.path().to_path_buf()));
+        let paths = engine.paths();
+
+        // An installed engine whose interpreter records being launched, then
+        // leaves the serving to the mock below.
+        let launches = scratch.path().join("launches");
+        let python = paths.venv_python();
+        fs::create_dir_all(
+            python
+                .parent()
+                .expect("the interpreter sits in a directory"),
+        )?;
+        fs::write(
+            &python,
+            format!("#!/bin/sh\necho launched >> '{}'\n", launches.display()),
+        )?;
+        fs::set_permissions(&python, fs::Permissions::from_mode(0o755))?;
+        fs::write(paths.settings(), "")?;
+        fs::write(paths.revision(), provision_marker())?;
+        let port = settings::free_port()?;
+        fs::write(paths.portfile(), port.to_string())?;
+
+        let record = launches.clone();
+        let instance = tokio::spawn(async move {
+            while !record.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            let listener = std::net::TcpListener::bind(("127.0.0.1", port))?;
+            let server = MockServer::builder().listener(listener).start().await;
+            Mock::given(path("/healthz"))
+                .respond_with(ResponseTemplate::new(200))
+                .mount(&server)
+                .await;
+            anyhow::Ok(server)
+        });
+
+        let client = reqwest::Client::new();
+        let (mut first_progress, mut second_progress) = (Vec::new(), Vec::new());
+        let (first, second) = tokio::join!(
+            engine.ensure_running(&client, &mut first_progress),
+            engine.ensure_running(&client, &mut second_progress),
+        );
+        let _instance = instance.await??;
+
+        assert_eq!(first?, second?);
+        assert_eq!(fs::read_to_string(&launches)?.lines().count(), 1);
+        Ok(())
     }
 }
