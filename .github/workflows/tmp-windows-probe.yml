@@ -10,9 +10,38 @@ permissions:
 
 jobs:
   probe:
-    runs-on: windows-latest
+    name: ${{ matrix.os }} realtime=${{ matrix.realtime }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, realtime: false }
+          - { os: windows-2025, realtime: false }
+          - { os: windows-2025, realtime: true }
+          - { os: windows-11-arm, realtime: false }
+          - { os: windows-11-arm, realtime: true }
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
+      - name: Report the machine
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, OSArchitecture | Out-String | Write-Host
+          & "$env:SystemRoot\System32\tar.exe" --version
+          Get-MpComputerStatus -ErrorAction SilentlyContinue | Format-List AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled | Out-String | Write-Host
+          (Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath | Out-String | Write-Host
+
+      - name: Turn Defender's scanning on
+        if: matrix.realtime
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $paths = (Get-MpPreference).ExclusionPath
+          if ($paths) { Remove-MpPreference -ExclusionPath $paths }
+          Set-MpPreference -DisableRealtimeMonitoring $false
+          Start-Sleep 5
+          Get-MpComputerStatus | Format-List AMServiceEnabled, RealTimeProtectionEnabled | Out-String | Write-Host
+
       - name: Run the published hodis as a standard user
         shell: pwsh
         run: |
@@ -28,38 +57,44 @@ jobs:
             '@echo off'
             "whoami > $dir\who.txt"
             "whoami /priv >> $dir\who.txt"
-            "curl.exe -sSL -o %TEMP%\sx.tar.gz https://github.com/searxng/searxng/archive/$rev.tar.gz"
-            'mkdir %TEMP%\sx'
-            "tar -xf %TEMP%\sx.tar.gz -C %TEMP%\sx > $dir\tar.txt 2>&1"
-            "echo tar exit %ERRORLEVEL%>> $dir\tar.txt"
+            "curl.exe -sSL -o ""%TEMP%\sx.tar.gz"" https://github.com/searxng/searxng/archive/$rev.tar.gz"
+            'mkdir "%TEMP%\sx"'
+            "%SystemRoot%\System32\tar.exe -xf ""%TEMP%\sx.tar.gz"" -C ""%TEMP%\sx"" > $dir\tar.txt 2>&1"
+            "echo tar-exit=%ERRORLEVEL% >> $dir\tar.txt"
+            "echo first-run-start %TIME% > $dir\times.txt"
             "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out1.txt 2> $dir\err1.txt"
-            "echo %ERRORLEVEL%> $dir\exit1.txt"
-            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out2.txt 2> $dir\err2.txt"
-            "echo %ERRORLEVEL%> $dir\exit2.txt"
-            "echo done> $dir\finished.txt"
+            "echo exit=%ERRORLEVEL% > $dir\exit1.txt"
+            "echo first-run-end %TIME% >> $dir\times.txt"
+            "$dir\hodis.exe --provider searxng ""cargo build"" > $dir\out2.txt 2> $dir\err2.txt"
+            "echo exit=%ERRORLEVEL% > $dir\exit2.txt"
+            "echo second-run-end %TIME% >> $dir\times.txt"
+            "echo done > $dir\finished.txt"
           ) | Set-Content -Encoding ascii "$dir\run.cmd"
 
-          $name = 'hodis-smoke'
+          $name = 'hodis smoke'
           $password = "Aa1!$([guid]::NewGuid())"
           New-LocalUser -Name $name -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
           Add-LocalGroupMember -Group 'Users' -Member $name
           # Lets the account start a batch job without giving it any admin right.
           Add-LocalGroupMember -Group 'Performance Log Users' -Member $name
-          Get-LocalGroupMember -Group 'Administrators' | Out-String | Write-Host
 
           $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $dir\run.cmd"
-          Register-ScheduledTask -TaskName $name -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
-          Start-ScheduledTask -TaskName $name
-          Start-Sleep 10
-          Get-ScheduledTaskInfo -TaskName $name | Format-List LastRunTime, LastTaskResult | Out-String | Write-Host
+          Register-ScheduledTask -TaskName 'hodis-smoke' -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
+          Start-ScheduledTask -TaskName 'hodis-smoke'
 
-          $deadline = (Get-Date).AddMinutes(15)
+          $deadline = (Get-Date).AddMinutes(20)
           while (-not (Test-Path "$dir\finished.txt") -and (Get-Date) -lt $deadline) { Start-Sleep 5 }
-          Get-ScheduledTaskInfo -TaskName $name | Format-List LastRunTime, LastTaskResult | Out-String | Write-Host
+          Get-ScheduledTaskInfo -TaskName 'hodis-smoke' | Format-List LastTaskResult | Out-String | Write-Host
 
-          foreach ($file in 'who', 'tar', 'exit1', 'err1', 'out1', 'exit2', 'err2') {
+          foreach ($file in 'who', 'tar', 'times', 'exit1', 'exit2') {
             Write-Host "--- $file"
-            Get-Content "$dir\$file.txt" -Tail 40 -ErrorAction SilentlyContinue
+            Get-Content "$dir\$file.txt" -Tail 30 -ErrorAction SilentlyContinue
           }
+          Write-Host '--- err1 without package lines'
+          Get-Content "$dir\err1.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -notmatch '^ \+ ' }
+          Write-Host '--- err2'
+          Get-Content "$dir\err2.txt" -Tail 15 -ErrorAction SilentlyContinue
+          Write-Host '--- out1 lines'
+          (Get-Content "$dir\out1.txt" -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
           Write-Host '--- engine log'
-          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 30 -ErrorAction SilentlyContinue
+          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 12 -ErrorAction SilentlyContinue
