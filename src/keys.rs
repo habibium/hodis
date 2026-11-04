@@ -107,7 +107,7 @@ impl fmt::Debug for ApiKey {
 }
 
 /// A credential store holding API keys.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Keychain {
     store: Arc<CredentialStore>,
 }

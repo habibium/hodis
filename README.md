@@ -48,9 +48,32 @@ the install script avoids that.
 
 With Rust 1.96 or newer, `cargo install hodis` builds it from crates.io.
 
-Searching needs nothing else. Setting up hodis's own SearXNG, if you choose
-that, needs `tar`, which macOS, Windows 10 and later, and most Linux systems
-ship.
+hodis needs nothing else, even to set up its own SearXNG.
+
+## First run
+
+The first time you run `hodis` in a terminal, it asks which provider to use,
+then only what that provider needs: for SearXNG, whether to use an instance you
+already run or install one, and for Serper, your API key. It tests the provider
+with one search, shows each thing it adds or changes as it goes, and saves your
+choice to the config file only once the provider works.
+
+```text
+(4/8) Downloading SearXNG 2026.8.14
+      unpacked 988 files into engine/source
+(5/8) Installing Python packages
+      + babel 2.18.0
+[ 57%] [###########---------] 0:03 / Installing Python packages
+```
+
+`hodis setup` asks again, to change provider or to retry a setup that failed. If
+SearXNG's install fails, the full output is in `engine/setup.log` in hodis's
+[data directory](#files). Pressing esc at the first question leaves everything
+as it was, and hodis asks again next time.
+
+Nothing is asked when a search's output goes to a file or a pipe, when
+`--provider` names a provider, or once a config file exists, so scripts and
+agents are never held up.
 
 ## Searching
 
@@ -137,12 +160,12 @@ url = "https://searxng.example.org/"
 The instance must serve JSON, which public instances often refuse: `json` has
 to be listed under `search.formats` in its `settings.yml`.
 
-hodis can also run an instance of its own. Choose SearXNG with
-`--provider searxng` or `provider = "searxng"`, and if nothing answers at
-`localhost:8888`, hodis installs one: the first time, it downloads a Python
-interpreter and SearXNG, a few hundred megabytes, into its data directory.
-Later searches reuse that instance, which listens on 127.0.0.1 only and keeps
-running between searches. Setting `url` turns this off unless
+hodis can also run an instance of its own, which `hodis setup` offers to
+install. So does `--provider searxng` or `provider = "searxng"` when nothing
+answers at `localhost:8888`. The first time, it downloads a Python interpreter
+and SearXNG, about 90 MiB, into its data directory, where they take up about
+280 MiB. Later searches reuse that instance, which listens on 127.0.0.1 only
+and keeps running between searches. Setting `url` turns this off unless
 `embedded = true` is set as well.
 
 ### Serper

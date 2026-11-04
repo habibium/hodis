@@ -14,6 +14,7 @@ use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
 use serde::de::value::SeqAccessDeserializer;
 use serde::de::{self, Deserializer, IntoDeserializer, SeqAccess, Visitor};
+use toml_edit::{DocumentMut, Item, Table, value};
 use url::Url;
 
 use crate::output::{ColorWhen, OutputFormat};
@@ -114,6 +115,65 @@ struct DuckDuckGoTable {
 #[derive(Default, Deserialize)]
 struct CacheTable {
     ttl: Option<u64>,
+}
+
+/// What a saved choice of provider says about where SearXNG is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearXNGChoice {
+    /// Whatever the file says, as the provider chosen does not use it.
+    Unchanged,
+    /// The instance hodis runs itself.
+    Embedded,
+    /// An instance the user runs, which hodis must not replace with its own if
+    /// it stops answering.
+    Instance(Url),
+}
+
+/// Records a choice of provider in the config file at `path`, creating it if
+/// needed. Everything else in the file stays as it is, comments included.
+pub fn save_choice(path: &Path, provider: Provider, searxng: &SearXNGChoice) -> Result<()> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            return Err(e).with_context(|| format!("cannot read config file {}", path.display()));
+        }
+    };
+    let mut document: DocumentMut = text
+        .parse()
+        .with_context(|| format!("invalid config file {}", path.display()))?;
+
+    document["provider"] = value(provider.id());
+    match searxng {
+        SearXNGChoice::Unchanged => {}
+        SearXNGChoice::Embedded => forget_searxng_address(&mut document),
+        SearXNGChoice::Instance(url) => {
+            forget_searxng_address(&mut document);
+            let mut table = Table::new();
+            table["url"] = value(url.as_str());
+            document["searxng"] = Item::Table(table);
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("cannot create {}", parent.display()))?;
+    }
+    // Renamed into place, so that a crash cannot leave half a config file.
+    let temporary = path.with_extension("toml.new");
+    fs::write(&temporary, document.to_string())
+        .with_context(|| format!("cannot write {}", temporary.display()))?;
+    fs::rename(&temporary, path).with_context(|| format!("cannot write {}", path.display()))
+}
+
+fn forget_searxng_address(document: &mut DocumentMut) {
+    if let Some(table) = document.get_mut("searxng").and_then(Item::as_table_mut) {
+        table.remove("url");
+        table.remove("embedded");
+        if table.is_empty() {
+            document.remove("searxng");
+        }
+    }
 }
 
 /// The config file hodis reads: the one `HODIS_CONFIG` names, else
@@ -255,7 +315,7 @@ fn one_or_many<'de, D: Deserializer<'de>>(
 
 /// `localhost:8888` parses as a URL with `localhost` as its scheme, so the
 /// scheme is checked rather than trusted.
-fn base_url(key: &str, mut url: Url) -> Result<Url> {
+pub(crate) fn base_url(key: &str, mut url: Url) -> Result<Url> {
     ensure!(
         matches!(url.scheme(), "http" | "https"),
         "{key} must be an http or https URL, not {url}"

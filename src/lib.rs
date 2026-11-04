@@ -6,6 +6,7 @@ pub mod mcp;
 pub mod output;
 pub mod progress;
 pub mod providers;
+pub mod setup;
 pub mod tui;
 
 use std::num::NonZeroU32;

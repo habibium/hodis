@@ -707,6 +707,18 @@ fn find_shallow(dir: &Path, name: &OsStr) -> Option<PathBuf> {
         })
 }
 
+/// Leaves `paths` looking like an install whose instance listens on `port`.
+#[cfg(test)]
+pub(crate) fn fake_install(paths: &Paths, port: u16) -> Result<()> {
+    let python = paths.venv_python();
+    fs::create_dir_all(python.parent().context("the interpreter has a directory")?)?;
+    fs::write(python, "")?;
+    fs::write(paths.settings(), "")?;
+    fs::write(paths.revision(), provision_marker())?;
+    fs::write(paths.portfile(), port.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;

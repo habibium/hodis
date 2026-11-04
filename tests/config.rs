@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use clap::ValueEnum;
 
-use hodis::config::Config;
+use hodis::config::{Config, SearXNGChoice, save_choice};
 use hodis::output::{ColorWhen, OutputFormat};
 use hodis::{Provider, Providers};
 
@@ -233,4 +233,105 @@ fn an_error_in_a_file_names_the_file() -> anyhow::Result<()> {
         "{error:#}"
     );
     Ok(())
+}
+
+fn saved(before: Option<&str>, provider: Provider, searxng: &SearXNGChoice) -> String {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let path = dir.path().join("hodis").join("config.toml");
+    if let Some(before) = before {
+        fs::create_dir_all(path.parent().expect("the path has a directory"))
+            .expect("the directory is created");
+        fs::write(&path, before).expect("the config is written");
+    }
+    save_choice(&path, provider, searxng).expect("the choice is saved");
+    fs::read_to_string(&path).expect("the config is readable")
+}
+
+fn own_instance() -> SearXNGChoice {
+    SearXNGChoice::Instance("http://sx.example/".parse().expect("a valid url"))
+}
+
+#[test]
+fn a_saved_choice_creates_the_file_and_its_directory() {
+    assert_eq!(
+        saved(None, Provider::DuckDuckGo, &SearXNGChoice::Unchanged),
+        "provider = \"duckduckgo\"\n"
+    );
+}
+
+#[test]
+fn a_saved_choice_keeps_the_rest_of_the_file() {
+    let before = "# my settings\nformat = \"json\" # for scripts\n\n[cache]\nttl = 60\n";
+    let after = saved(Some(before), Provider::Serper, &SearXNGChoice::Unchanged);
+
+    assert!(after.contains("# my settings"), "{after}");
+    assert!(after.contains("format = \"json\" # for scripts"), "{after}");
+    assert_eq!(
+        parse(&after).providers,
+        Providers::Listed(vec![Provider::Serper])
+    );
+    assert_eq!(parse(&after).cache_ttl, Duration::from_mins(1));
+}
+
+#[test]
+fn a_saved_choice_replaces_a_list_of_providers() {
+    let after = saved(
+        Some("provider = [\"searxng\", \"serper\"]\n"),
+        Provider::DuckDuckGo,
+        &SearXNGChoice::Unchanged,
+    );
+    assert_eq!(after, "provider = \"duckduckgo\"\n");
+}
+
+#[test]
+fn an_instance_is_saved_so_that_hodis_will_not_replace_it() {
+    let after = saved(None, Provider::SearXNG, &own_instance());
+
+    let config = parse(&after);
+    assert_eq!(config.searxng.url.as_str(), "http://sx.example/");
+    assert!(!config.searxng.embedded);
+}
+
+#[test]
+fn choosing_hodis_s_own_searxng_forgets_an_old_address() {
+    let after = saved(
+        Some("[searxng]\nurl = \"http://old.example/\"\nembedded = false\n"),
+        Provider::SearXNG,
+        &SearXNGChoice::Embedded,
+    );
+
+    assert_eq!(after, "provider = \"searxng\"\n");
+    assert!(parse(&after).searxng.embedded);
+}
+
+#[test]
+fn a_new_address_replaces_the_old_one_and_its_setting() {
+    let after = saved(
+        Some("[searxng]\nurl = \"http://old.example/\"\nembedded = true\n"),
+        Provider::SearXNG,
+        &own_instance(),
+    );
+
+    let config = parse(&after);
+    assert_eq!(config.searxng.url.as_str(), "http://sx.example/");
+    assert!(!config.searxng.embedded);
+}
+
+#[test]
+fn a_config_file_that_is_not_toml_is_left_alone() {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let path = dir.path().join("config.toml");
+    fs::write(&path, "not = = toml").expect("the config is written");
+
+    let error = save_choice(&path, Provider::Serper, &SearXNGChoice::Unchanged)
+        .expect_err("it cannot be edited");
+
+    assert!(
+        format!("{error:#}").contains("invalid config file"),
+        "{error:#}"
+    );
+    assert_eq!(
+        fs::read_to_string(&path).expect("the file is still there"),
+        "not = = toml"
+    );
 }
