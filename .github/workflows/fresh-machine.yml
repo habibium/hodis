@@ -137,3 +137,26 @@ jobs:
           $code = (Get-Content "$dir\exit.txt" -ErrorAction SilentlyContinue | Out-String).Trim()
           Write-Host "exit code: $code"
           if ($code -ne '0') { exit 1 }
+
+  # Everything above runs with its output redirected. This one goes through the
+  # wizard in a real Windows console, as a person would.
+  windows-console:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Install SearXNG through the wizard
+        shell: pwsh
+        run: |
+          python -m pip install --quiet pywinpty
+          python .github/scripts/windows_wizard.py target\release\hodis.exe
+          $config = "$env:APPDATA\hodis\config.toml"
+          Get-Content $config
+          if (-not (Select-String -Quiet 'provider = "searxng"' $config)) { throw "the choice was not saved" }
+          Get-Content "$env:APPDATA\hodis\engine\setup.log" -Tail 5

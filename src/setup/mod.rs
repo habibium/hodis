@@ -356,8 +356,8 @@ impl<'a, P: Prompts, W: Write> Wizard<'a, P, W> {
                 .and_then(|keychain| keychain.set(provider, &key.key));
             match stored {
                 Ok(()) => self.progress.note("stored in the system keychain"),
-                Err(e) => self.progress.warn(&format!(
-                    "{e:#}\nThe key is not stored. Set {} in your environment to use it.",
+                Err(_) => self.progress.warn(&format!(
+                    "there is no system keychain to keep the key in, so set {} in your environment to use it",
                     provider.env_var()
                 )),
             }
