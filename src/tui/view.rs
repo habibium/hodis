@@ -10,7 +10,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, Mode, Notice, Reason, Shown};
-use crate::output::{one_line, warnings};
+use crate::output::{fit, one_line, warnings};
 use crate::{Provider, Providers, SearchResponse, SearchResult};
 
 const SNIPPET_LINES: usize = 2;
@@ -371,28 +371,6 @@ fn names(providers: &[Provider]) -> String {
         .map(|provider| provider.name())
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// `text` cut to `width` columns, ending in an ellipsis where it was cut.
-fn fit(text: &str, width: usize) -> String {
-    if text.width() <= width {
-        return text.to_owned();
-    }
-    let Some(room) = width.checked_sub(1) else {
-        return String::new();
-    };
-    let mut fitted = String::new();
-    let mut used = 0;
-    for grapheme in text.graphemes(true) {
-        used += grapheme.width();
-        if used > room {
-            break;
-        }
-        fitted.push_str(grapheme);
-    }
-    fitted.truncate(fitted.trim_end().len());
-    fitted.push('…');
-    fitted
 }
 
 /// `text` in lines of at most `width` columns, broken between words where

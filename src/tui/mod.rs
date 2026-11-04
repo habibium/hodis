@@ -25,6 +25,7 @@ use url::Url;
 
 use crate::cache::Cache;
 use crate::config::Config;
+use crate::progress::Progress;
 use crate::{Providers, SearchParams, SearchResponse, providers};
 use app::{App, Command};
 use view::Theme;
@@ -40,7 +41,7 @@ pub async fn run(
     providers: Providers,
     cache: Option<Cache>,
     first: Option<SearchParams>,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<()> {
     let client = Client::builder().build()?;
     providers::prepare(&providers, &config, &client, progress).await?;
@@ -89,21 +90,15 @@ struct Session {
     cache: Option<Cache>,
 }
 
-struct Searched {
-    outcome: Result<SearchResponse>,
-    /// Whether the search had to set up the engine hodis runs itself, which
-    /// lets the tools doing that write over the screen.
-    set_up_engine: bool,
-}
-
 impl Session {
-    async fn search(&self, params: SearchParams, fresh: bool) -> Searched {
+    async fn search(&self, params: SearchParams, fresh: bool) -> Result<SearchResponse> {
         let cache = self
             .cache
             .clone()
             .map(|cache| if fresh { cache.without_reads() } else { cache });
-        let mut progress = Vec::new();
-        let outcome = providers::search(
+        // The screen is taken, so a search starting the engine does so quietly.
+        let mut progress = Progress::plain(io::sink());
+        providers::search(
             &self.providers,
             &params,
             &self.config,
@@ -111,11 +106,7 @@ impl Session {
             cache.as_ref(),
             &mut progress,
         )
-        .await;
-        Searched {
-            outcome,
-            set_up_engine: !progress.is_empty(),
-        }
+        .await
     }
 }
 
@@ -166,7 +157,7 @@ async fn event_loop<B: Backend>(
 where
     B::Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut search: Option<Pin<Box<dyn Future<Output = Searched> + '_>>> = None;
+    let mut search: Option<Pin<Box<dyn Future<Output = Result<SearchResponse>> + '_>>> = None;
     let mut ticks = interval(TICK);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
@@ -197,10 +188,7 @@ where
             },
             searched = finish(&mut search), if search.is_some() => {
                 search = None;
-                if searched.set_up_engine {
-                    terminal.clear()?;
-                }
-                app.searched(searched.outcome);
+                app.searched(searched);
             }
             _ = ticks.tick(), if app.is_searching() => app.tick(),
         }

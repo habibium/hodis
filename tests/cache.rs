@@ -38,7 +38,7 @@ async fn search(
         &config,
         &client,
         Some(cache),
-        &mut Vec::new(),
+        &mut hodis::progress::Progress::plain(Vec::new()),
     )
     .await
 }

@@ -5,7 +5,7 @@
 //! the process table, so "healthy" means able to serve, not merely alive.
 
 use std::fs;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -47,7 +47,9 @@ pub fn read_pid(paths: &Paths) -> Option<u32> {
         .ok()
 }
 
-pub fn spawn(paths: &Paths) -> Result<u32> {
+/// The child is only for watching the instance start: dropping it leaves the
+/// instance running.
+pub fn spawn(paths: &Paths) -> Result<Child> {
     let log_path = paths.log();
     let log = fs::File::create(&log_path)
         .with_context(|| format!("cannot open {} for the instance log", log_path.display()))?;
@@ -68,11 +70,10 @@ pub fn spawn(paths: &Paths) -> Result<u32> {
     let child = command
         .spawn()
         .with_context(|| format!("cannot start {}", paths.venv_python().display()))?;
-    let pid = child.id();
 
-    fs::write(paths.pidfile(), pid.to_string())
+    fs::write(paths.pidfile(), child.id().to_string())
         .with_context(|| format!("cannot write {}", paths.pidfile().display()))?;
-    Ok(pid)
+    Ok(child)
 }
 
 /// Signals only after the recorded port is confirmed to be serving SearXNG, so
@@ -92,6 +93,13 @@ pub async fn stop(client: &Client, paths: &Paths) -> Result<bool> {
         return Ok(false);
     }
 
+    terminate(pid)?;
+    let _ = fs::remove_file(paths.pidfile());
+    Ok(true)
+}
+
+/// Ends the instance with process ID `pid`, and on Windows whatever it started.
+pub fn terminate(pid: u32) -> Result<()> {
     let status = terminate_command(pid)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -99,9 +107,7 @@ pub async fn stop(client: &Client, paths: &Paths) -> Result<bool> {
         .status()
         .context("cannot run the platform's process termination tool")?;
     anyhow::ensure!(status.success(), "could not stop the instance (pid {pid})");
-
-    let _ = fs::remove_file(paths.pidfile());
-    Ok(true)
+    Ok(())
 }
 
 /// Detaches from hodis's terminal so the instance survives the CLI exiting and

@@ -7,6 +7,8 @@ use anstyle::{AnsiColor, Color, Style};
 use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::{Diagnostics, SearchResponse};
 
@@ -26,11 +28,6 @@ const WARN: Style = Style::new()
     .bold()
     .fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
 const DIAG_TEXT: Style = Style::new().dimmed();
-
-const SETUP: Style = Style::new()
-    .bold()
-    .fg_color(Some(Color::Ansi(AnsiColor::Green)));
-const SETUP_TEXT: Style = Style::new().dimmed();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -165,11 +162,26 @@ fn render_urls(response: &SearchResponse, out: &mut impl Write) -> io::Result<()
     Ok(())
 }
 
-pub fn render_setup_step(message: &str, out: &mut impl Write) -> io::Result<()> {
-    writeln!(
-        out,
-        "{SETUP}setup:{SETUP:#} {SETUP_TEXT}{message}{SETUP_TEXT:#}"
-    )
+/// `text` cut to `width` columns, ending in an ellipsis where it was cut.
+pub(crate) fn fit(text: &str, width: usize) -> String {
+    if text.width() <= width {
+        return text.to_owned();
+    }
+    let Some(room) = width.checked_sub(1) else {
+        return String::new();
+    };
+    let mut fitted = String::new();
+    let mut used = 0;
+    for grapheme in text.graphemes(true) {
+        used += grapheme.width();
+        if used > room {
+            break;
+        }
+        fitted.push_str(grapheme);
+    }
+    fitted.truncate(fitted.trim_end().len());
+    fitted.push('…');
+    fitted
 }
 
 pub fn render_diagnostics(diagnostics: &Diagnostics, out: &mut impl Write) -> io::Result<()> {

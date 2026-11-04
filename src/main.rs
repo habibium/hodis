@@ -15,6 +15,7 @@ use hodis::{
     keys::{ApiKey, Keychain, KeyedProvider},
     mcp,
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
+    progress::Progress,
     providers, tui,
 };
 
@@ -148,7 +149,8 @@ async fn interactive(args: Search, config: Config, err: &mut impl Write) -> Resu
         query: args.query.join(" "),
         page: args.page,
     });
-    tui::run(config, providers, cache, first, err).await
+    let mut progress = Progress::new(err, io::stderr().is_terminal());
+    tui::run(config, providers, cache, first, &mut progress).await
 }
 
 async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
@@ -163,8 +165,17 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
         page: args.page,
     };
 
-    let response =
-        providers::search(&providers, &params, &config, &client, cache.as_ref(), err).await?;
+    let mut progress = Progress::new(&mut *err, io::stderr().is_terminal());
+    let response = providers::search(
+        &providers,
+        &params,
+        &config,
+        &client,
+        cache.as_ref(),
+        &mut progress,
+    )
+    .await?;
+    drop(progress);
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends

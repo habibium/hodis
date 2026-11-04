@@ -15,6 +15,7 @@ use crate::cache::Cache;
 use crate::config::Config;
 use crate::engine::{Engine, is_reachable};
 use crate::keys::{self, KeyedProvider};
+use crate::progress::Progress;
 use crate::{
     Diagnostics, Provider, ProviderIssue, Providers, SearchParams, SearchProvider, SearchResponse,
     SearchResult,
@@ -38,7 +39,7 @@ pub async fn search(
     config: &Config,
     client: &Client,
     cache: Option<&Cache>,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<SearchResponse> {
     let (providers, embedded) = match providers {
         Providers::Listed(listed) => (distinct(listed), config.searxng.embedded),
@@ -106,14 +107,13 @@ pub async fn search(
 }
 
 /// Sets up the engine hodis runs itself when searching `providers` would need
-/// it, reporting the steps to `progress`. A search does this too, but setting
-/// up lets uv write to the terminal, which a full-screen interface must do
-/// before it takes the screen over.
+/// it, reporting the steps to `progress`. A search does this too, but a
+/// full-screen interface has nowhere to show them once it takes the screen.
 pub async fn prepare(
     providers: &Providers,
     config: &Config,
     client: &Client,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<()> {
     if let Providers::Listed(listed) = providers
         && listed.contains(&Provider::SearXNG)
@@ -143,7 +143,7 @@ async fn connect(
     config: &Config,
     client: &Client,
     embedded: bool,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<Box<dyn SearchProvider>> {
     Ok(match provider {
         Provider::SearXNG => Box::new(SearXNGProvider {
@@ -167,7 +167,7 @@ async fn searxng_url(
     client: &Client,
     config: &Config,
     embedded: bool,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<Url> {
     let url = &config.searxng.url;
     if !embedded || is_reachable(client, url).await {

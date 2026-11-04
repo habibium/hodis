@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use hodis::engine::{Engine, Paths, is_reachable};
+use hodis::progress::Progress;
 
 #[tokio::test]
 #[ignore = "downloads a python interpreter and searxng; run: cargo test -- --ignored"]
@@ -17,8 +18,12 @@ async fn a_scratch_data_directory_bootstraps_into_a_healthy_instance() -> anyhow
         .timeout(Duration::from_secs(30))
         .build()?;
 
-    let mut progress = Vec::new();
+    let mut progress = Progress::plain(Vec::new());
     let url = engine.ensure_running(&client, &mut progress).await?;
+    let report = progress.written();
+    for expected in ["Installing Python", "+ flask", "added engine", "running at"] {
+        assert!(report.contains(expected), "{expected}: {report}");
+    }
 
     assert!(
         is_reachable(&client, &url).await,
@@ -43,5 +48,12 @@ async fn a_scratch_data_directory_bootstraps_into_a_healthy_instance() -> anyhow
         !engine.paths().pidfile().is_file(),
         "stopping must clear the pid file"
     );
+
+    // An install cut short leaves its virtual environment, which uv refuses to
+    // replace unless told to, and which must not block the next attempt.
+    std::fs::remove_file(engine.paths().revision())?;
+    let retried = engine.ensure_running(&client, &mut progress).await?;
+    assert!(is_reachable(&client, &retried).await);
+    engine.stop(&client).await?;
     Ok(())
 }

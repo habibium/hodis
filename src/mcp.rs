@@ -21,6 +21,7 @@ use serde::Deserialize;
 use crate::cache::Cache;
 use crate::config::Config;
 use crate::output::Versioned;
+use crate::progress::Progress;
 use crate::{Providers, SearchParams, SearchResponse, providers};
 
 /// An MCP server with one tool, `web_search`.
@@ -70,7 +71,7 @@ impl Server {
     }
 
     async fn search(&self, params: &SearchParams) -> Result<SearchResponse> {
-        let mut progress = AutoStream::auto(io::stderr());
+        let mut progress = Progress::plain(AutoStream::auto(io::stderr()));
         providers::search(
             &self.providers,
             params,
