@@ -809,7 +809,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_installed_searxng_needs_no_confirming_and_no_address_saved() {
+    async fn an_installed_searxng_needs_no_confirming_and_is_saved_by_name() {
         let server = searxng(json(SEARXNG_BODY)).await;
         let setup = Setup::new(NOBODY);
         engine::fake_install(&setup.paths(), server.address().port())
@@ -818,7 +818,10 @@ mod tests {
         let done = setup.run(&[Answer::Pick(SEARXNG), Answer::Pick(0)]).await;
 
         assert_eq!(done.outcome, Outcome::Saved);
-        assert_eq!(setup.saved().as_deref(), Some("provider = \"searxng\"\n"));
+        let saved = setup.saved().expect("the config is saved");
+        assert!(saved.contains("provider = \"searxng\""), "{saved}");
+        assert!(saved.contains("embedded = \"only\""), "{saved}");
+        assert!(!saved.contains("url"), "{saved}");
     }
 
     fn serper_settings(server: &MockServer) -> String {

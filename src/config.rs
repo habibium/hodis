@@ -50,9 +50,52 @@ pub struct SearXNG {
     /// Ends in `/`: endpoints are joined onto it, and a join replaces whatever
     /// follows the last slash.
     pub url: Url,
-    /// Whether hodis may install and run its own instance when nothing answers
-    /// at `url`. On unless the config file sets `url`.
-    pub embedded: bool,
+    /// When to search the instance hodis installs and runs itself.
+    pub embedded: Embedded,
+}
+
+/// When hodis searches the SearXNG instance it installs and runs itself. With
+/// no provider chosen, hodis only ever looks at `url`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Embedded {
+    /// Never, so `url` is the only instance. The default once `url` is set.
+    Never,
+    /// When nothing answers at `url`. The default otherwise.
+    Fallback,
+    /// Always, even when something answers at `url`.
+    Only,
+}
+
+impl<'de> Deserialize<'de> for Embedded {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Setting;
+
+        impl Visitor<'_> for Setting {
+            type Value = Embedded;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("true, false or \"only\"")
+            }
+
+            fn visit_bool<E: de::Error>(self, on: bool) -> Result<Self::Value, E> {
+                Ok(if on {
+                    Embedded::Fallback
+                } else {
+                    Embedded::Never
+                })
+            }
+
+            fn visit_str<E: de::Error>(self, word: &str) -> Result<Self::Value, E> {
+                if word == "only" {
+                    Ok(Embedded::Only)
+                } else {
+                    Err(E::invalid_value(de::Unexpected::Str(word), &self))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Setting)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,7 +142,7 @@ struct Document {
 #[derive(Default, Deserialize)]
 struct SearXNGTable {
     url: Option<Url>,
-    embedded: Option<bool>,
+    embedded: Option<Embedded>,
 }
 
 #[derive(Default, Deserialize)]
@@ -122,7 +165,7 @@ struct CacheTable {
 pub enum SearXNGChoice {
     /// Whatever the file says, as the provider chosen does not use it.
     Unchanged,
-    /// The instance hodis runs itself.
+    /// The instance hodis runs itself, even if another answers at `url`.
     Embedded,
     /// An instance the user runs, which hodis must not replace with its own if
     /// it stops answering.
@@ -132,6 +175,7 @@ pub enum SearXNGChoice {
 /// Records a choice of provider in the config file at `path`, creating it if
 /// needed. Everything else in the file stays as it is, comments included.
 pub fn save_choice(path: &Path, provider: Provider, searxng: &SearXNGChoice) -> Result<()> {
+    let path = &link_target(path)?;
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
@@ -146,13 +190,8 @@ pub fn save_choice(path: &Path, provider: Provider, searxng: &SearXNGChoice) -> 
     document["provider"] = value(provider.id());
     match searxng {
         SearXNGChoice::Unchanged => {}
-        SearXNGChoice::Embedded => forget_searxng_address(&mut document),
-        SearXNGChoice::Instance(url) => {
-            forget_searxng_address(&mut document);
-            let mut table = Table::new();
-            table["url"] = value(url.as_str());
-            document["searxng"] = Item::Table(table);
-        }
+        SearXNGChoice::Embedded => choose_searxng(&mut document, "embedded", "only"),
+        SearXNGChoice::Instance(url) => choose_searxng(&mut document, "url", url.as_str()),
     }
 
     if let Some(parent) = path.parent() {
@@ -166,13 +205,26 @@ pub fn save_choice(path: &Path, provider: Provider, searxng: &SearXNGChoice) -> 
     fs::rename(&temporary, path).with_context(|| format!("cannot write {}", path.display()))
 }
 
-fn forget_searxng_address(document: &mut DocumentMut) {
-    if let Some(table) = document.get_mut("searxng").and_then(Item::as_table_mut) {
+/// `path`, or the file it links to. Renaming over a link would replace it,
+/// cutting the config off from the dotfiles folder the link points into.
+fn link_target(path: &Path) -> Result<PathBuf> {
+    if path.is_symlink() {
+        fs::canonicalize(path).with_context(|| format!("cannot follow the link {}", path.display()))
+    } else {
+        Ok(path.to_owned())
+    }
+}
+
+/// Sets `key` in place of the `url` and `embedded` of the old choice, in the
+/// table as it stands so that comments around it stay.
+fn choose_searxng(document: &mut DocumentMut, key: &str, setting: &str) {
+    if !document.get("searxng").is_some_and(Item::is_table_like) {
+        document["searxng"] = Item::Table(Table::new());
+    }
+    if let Some(table) = document["searxng"].as_table_like_mut() {
         table.remove("url");
         table.remove("embedded");
-        if table.is_empty() {
-            document.remove("searxng");
-        }
+        table.insert(key, value(setting));
     }
 }
 
@@ -268,7 +320,11 @@ impl Config {
                 .map_or(DEFAULT_TIMEOUT, |secs| Duration::from_secs(secs.get())),
             searxng: SearXNG {
                 url,
-                embedded: document.searxng.embedded.unwrap_or(!url_set),
+                embedded: document.searxng.embedded.unwrap_or(if url_set {
+                    Embedded::Never
+                } else {
+                    Embedded::Fallback
+                }),
             },
             serper: Serper { url: serper_url },
             duckduckgo: DuckDuckGo {

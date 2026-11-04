@@ -14,7 +14,7 @@ use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::config::Config;
+use crate::config::{Config, Embedded};
 use crate::{Provider, SearchParams, SearchResponse};
 
 /// Environment variable naming the directory hodis keeps its cache in.
@@ -151,6 +151,8 @@ impl Cache {
 /// such as the instance searched, misses the cache.
 fn key(provider: Provider, config: &Config, params: &SearchParams) -> String {
     let instance = match provider {
+        // Its port can change between runs, and its results are its own.
+        Provider::SearXNG if config.searxng.embedded == Embedded::Only => "embedded",
         Provider::SearXNG => config.searxng.url.as_str(),
         Provider::Serper => config.serper.url.as_str(),
         Provider::DuckDuckGo => config.duckduckgo.url.as_str(),
