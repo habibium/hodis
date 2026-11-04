@@ -81,3 +81,52 @@ jobs:
           & .\target\release\hodis.exe --provider searxng "cargo build"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "reuse took $($sw.Elapsed.TotalSeconds)s"
+
+  # CI's own account is an administrator, which hides what a standard Windows
+  # account is refused, such as creating a symlink. A task scheduled to run as
+  # such an account gets a real profile and the default data directory.
+  windows-standard-user:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Bootstrap and search as a standard user
+        shell: pwsh
+        run: |
+          $dir = 'C:\Users\Public\hodis-smoke'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item target\release\hodis.exe $dir
+          icacls $dir /grant 'Everyone:(OI)(CI)M' | Out-Null
+          @(
+            '@echo off'
+            "whoami /priv > $dir\privileges.txt"
+            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out.txt 2> $dir\err.txt"
+            "echo %ERRORLEVEL%> $dir\exit.txt"
+          ) | Set-Content -Encoding ascii "$dir\run.cmd"
+
+          $name = 'hodis-smoke'
+          $password = "Aa1!$([guid]::NewGuid())"
+          New-LocalUser -Name $name -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $dir\run.cmd"
+          Register-ScheduledTask -TaskName $name -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
+          Start-ScheduledTask -TaskName $name
+
+          $deadline = (Get-Date).AddMinutes(20)
+          while (-not (Test-Path "$dir\exit.txt") -and (Get-Date) -lt $deadline) { Start-Sleep 5 }
+
+          Get-Content "$dir\privileges.txt" -ErrorAction SilentlyContinue
+          Write-Host '--- stderr'
+          Get-Content "$dir\err.txt" -ErrorAction SilentlyContinue
+          Write-Host '--- stdout'
+          Get-Content "$dir\out.txt" -ErrorAction SilentlyContinue | Select-Object -First 20
+          Write-Host '--- engine log'
+          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 40 -ErrorAction SilentlyContinue
+          $code = Get-Content "$dir\exit.txt" -ErrorAction SilentlyContinue
+          Write-Host "exit code: $code"
+          if ($code -ne '0') { exit 1 }
