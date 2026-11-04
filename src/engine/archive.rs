@@ -32,10 +32,8 @@ pub fn unpack(name: &str, bytes: &[u8], into: &Path) -> Result<Unpacked> {
     }
 }
 
-/// Symlinks are left out because a standard Windows account may not create
-/// them, and names Windows cannot hold because `a:b` would become an alternate
-/// data stream of `a`. SearXNG's archive has both, in templates for servers it
-/// does not need here. Doing so everywhere keeps installs alike.
+/// Leaves out symlinks, which a standard Windows account may not create, and
+/// names like `a:b`, a data stream there. SearXNG's archive has both, unused.
 fn unpack_tar_gz(bytes: &[u8], into: &Path) -> Result<Unpacked> {
     let mut archive = Archive::new(GzDecoder::new(bytes));
     let mut unpacked = Unpacked {
