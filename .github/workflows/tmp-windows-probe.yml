@@ -9,92 +9,74 @@ permissions:
   contents: read
 
 jobs:
-  probe:
-    name: ${{ matrix.os }} realtime=${{ matrix.realtime }}
+  console:
+    name: console ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: windows-2022, realtime: false }
-          - { os: windows-2025, realtime: false }
-          - { os: windows-2025, realtime: true }
-          - { os: windows-11-arm, realtime: false }
-          - { os: windows-11-arm, realtime: true }
+        os: [windows-2025, windows-11-arm]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
-      - name: Report the machine
+      - name: Run the published hodis in a real console
         shell: pwsh
         run: |
-          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, OSArchitecture | Out-String | Write-Host
-          & "$env:SystemRoot\System32\tar.exe" --version
-          Get-MpComputerStatus -ErrorAction SilentlyContinue | Format-List AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled | Out-String | Write-Host
-          (Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath | Out-String | Write-Host
-
-      - name: Turn Defender's scanning on
-        if: matrix.realtime
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $paths = (Get-MpPreference).ExclusionPath
-          if ($paths) { Remove-MpPreference -ExclusionPath $paths }
-          Set-MpPreference -DisableRealtimeMonitoring $false
-          Start-Sleep 5
-          Get-MpComputerStatus | Format-List AMServiceEnabled, RealTimeProtectionEnabled | Out-String | Write-Host
-
-      - name: Run the published hodis as a standard user
-        shell: pwsh
-        run: |
-          $dir = 'C:\Users\Public\hodis-smoke'
+          python --version
+          python -m pip install --quiet pywinpty
+          $dir = "$env:RUNNER_TEMP\hodis-console"
           New-Item -ItemType Directory -Force $dir | Out-Null
-          $zip = "$dir\hodis.zip"
-          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/habibium/hodis/releases/download/v0.1.0/hodis-x86_64-pc-windows-msvc.zip' -OutFile $zip
-          Expand-Archive $zip $dir
-          Copy-Item "$dir\hodis-x86_64-pc-windows-msvc\hodis.exe" $dir
-          icacls $dir /grant 'Everyone:(OI)(CI)M' | Out-Null
-          $rev = '094c33d406da578ac851f2d8ad10fdfa344a9493'
-          @(
-            '@echo off'
-            "whoami > $dir\who.txt"
-            "whoami /priv >> $dir\who.txt"
-            "curl.exe -sSL -o ""%TEMP%\sx.tar.gz"" https://github.com/searxng/searxng/archive/$rev.tar.gz"
-            'mkdir "%TEMP%\sx"'
-            "%SystemRoot%\System32\tar.exe -xf ""%TEMP%\sx.tar.gz"" -C ""%TEMP%\sx"" > $dir\tar.txt 2>&1"
-            "echo tar-exit=%ERRORLEVEL% >> $dir\tar.txt"
-            "echo first-run-start %TIME% > $dir\times.txt"
-            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out1.txt 2> $dir\err1.txt"
-            "echo exit=%ERRORLEVEL% > $dir\exit1.txt"
-            "echo first-run-end %TIME% >> $dir\times.txt"
-            "$dir\hodis.exe --provider searxng ""cargo build"" > $dir\out2.txt 2> $dir\err2.txt"
-            "echo exit=%ERRORLEVEL% > $dir\exit2.txt"
-            "echo second-run-end %TIME% >> $dir\times.txt"
-            "echo done > $dir\finished.txt"
-          ) | Set-Content -Encoding ascii "$dir\run.cmd"
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/habibium/hodis/releases/download/v0.1.0/hodis-x86_64-pc-windows-msvc.zip' -OutFile "$dir\hodis.zip"
+          Expand-Archive "$dir\hodis.zip" $dir
+          $exe = "$dir\hodis-x86_64-pc-windows-msvc\hodis.exe"
+          @'
+          import os, re, sys, time
+          from winpty import PtyProcess
 
-          $name = 'hodis smoke'
-          $password = "Aa1!$([guid]::NewGuid())"
-          New-LocalUser -Name $name -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
-          Add-LocalGroupMember -Group 'Users' -Member $name
-          # Lets the account start a batch job without giving it any admin right.
-          Add-LocalGroupMember -Group 'Performance Log Users' -Member $name
-
-          $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $dir\run.cmd"
-          Register-ScheduledTask -TaskName 'hodis-smoke' -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
-          Start-ScheduledTask -TaskName 'hodis-smoke'
-
-          $deadline = (Get-Date).AddMinutes(20)
-          while (-not (Test-Path "$dir\finished.txt") -and (Get-Date) -lt $deadline) { Start-Sleep 5 }
-          Get-ScheduledTaskInfo -TaskName 'hodis-smoke' | Format-List LastTaskResult | Out-String | Write-Host
-
-          foreach ($file in 'who', 'tar', 'times', 'exit1', 'exit2') {
-            Write-Host "--- $file"
-            Get-Content "$dir\$file.txt" -Tail 30 -ErrorAction SilentlyContinue
+          exe, data, mode = sys.argv[1:4]
+          env = dict(os.environ, HODIS_DATA_DIR=data)
+          args = [exe, "--provider", "searxng"] + (["rust programming language"] if mode == "query" else [])
+          p = PtyProcess.spawn(args, dimensions=(30, 120), env=env)
+          seen, deadline, sent = "", time.time() + 480, False
+          while p.isalive() and time.time() < deadline:
+              try:
+                  chunk = p.read(4096)
+              except EOFError:
+                  break
+              seen += chunk
+              if mode == "tui" and not sent and "search" in chunk.lower() and "setup:" not in chunk:
+                  time.sleep(2); p.write("q"); sent = True
+          text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07", "", seen)
+          lines = [l.rstrip() for l in text.splitlines() if l.strip() and not l.strip().startswith("+ ")]
+          print("\n".join(l[:160] for l in lines[:45]))
+          print("...")
+          print("\n".join(l[:160] for l in lines[-12:]))
+          print("alive:", p.isalive(), "exit:", p.exitstatus)
+          '@ | Set-Content -Encoding utf8 "$dir\drive.py"
+          foreach ($mode in 'query', 'tui') {
+            Write-Host "=== console $mode"
+            python "$dir\drive.py" $exe "$dir\data-$mode" $mode
           }
-          Write-Host '--- err1 without package lines'
-          Get-Content "$dir\err1.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -notmatch '^ \+ ' }
-          Write-Host '--- err2'
-          Get-Content "$dir\err2.txt" -Tail 15 -ErrorAction SilentlyContinue
-          Write-Host '--- out1 lines'
-          (Get-Content "$dir\out1.txt" -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
-          Write-Host '--- engine log'
-          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 12 -ErrorAction SilentlyContinue
+
+  own-python:
+    name: own python ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - name: Run the published hodis next to a python3.13 uv does not manage
+        shell: pwsh
+        env:
+          HODIS_DATA_DIR: ${{ runner.temp }}\hodis-own
+        run: |
+          $dir = "$env:RUNNER_TEMP\hodis-bin"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/habibium/hodis/releases/download/v0.1.0/hodis-x86_64-pc-windows-msvc.zip' -OutFile "$dir\hodis.zip"
+          Expand-Archive "$dir\hodis.zip" $dir
+          $bin = "$env:USERPROFILE\.local\bin"
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          Set-Content "$bin\python3.13.exe" 'not uv'
+          & "$dir\hodis-x86_64-pc-windows-msvc\hodis.exe" --provider searxng "rust programming language" 2>&1 | Where-Object { "$_" -notmatch '^ \+ ' } | Select-Object -First 25
+          Write-Host "exit: $LASTEXITCODE"
