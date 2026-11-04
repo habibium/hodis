@@ -159,4 +159,12 @@ jobs:
           $config = "$env:APPDATA\hodis\config.toml"
           Get-Content $config
           if (-not (Select-String -Quiet 'provider = "searxng"' $config)) { throw "the choice was not saved" }
+          if (-not (Select-String -Quiet 'embedded = "only"' $config)) { throw "the instance chosen was not saved" }
           Get-Content "$env:APPDATA\hodis\engine\setup.log" -Tail 5
+
+      - name: Search again with what the wizard saved
+        shell: pwsh
+        run: |
+          $document = target\release\hodis.exe --format json rust programming language | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "the search failed" }
+          if ($document.providers -notcontains 'searxng') { throw "the saved provider was not used" }
