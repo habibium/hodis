@@ -16,6 +16,9 @@
 - SearXNG gets three minutes to start rather than one, is compiled ahead of its
   first start, and reports the end of its log if it stops or does not answer.
 - `setup` is now a command, so searching for that word alone takes `hodis -- setup`.
+- `embedded = "only"` under `[searxng]` always searches hodis's own instance, even
+  when something else answers at `url`. `hodis setup` saves it when you choose
+  that instance, so another SearXNG on `localhost:8888` cannot take its place.
 
 ## 0.1.0 - 2026-11-01
 
