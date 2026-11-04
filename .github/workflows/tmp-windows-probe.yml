@@ -1,0 +1,65 @@
+name: tmp-windows-probe
+
+on:
+  push:
+    branches: [feat/setup-wizard]
+    paths: [.github/workflows/tmp-windows-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run the published hodis as a standard user
+        shell: pwsh
+        run: |
+          $dir = 'C:\Users\Public\hodis-smoke'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $zip = "$dir\hodis.zip"
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/habibium/hodis/releases/download/v0.1.0/hodis-x86_64-pc-windows-msvc.zip' -OutFile $zip
+          Expand-Archive $zip $dir
+          Copy-Item "$dir\hodis-x86_64-pc-windows-msvc\hodis.exe" $dir
+          icacls $dir /grant 'Everyone:(OI)(CI)M' | Out-Null
+          $rev = '094c33d406da578ac851f2d8ad10fdfa344a9493'
+          @(
+            '@echo off'
+            "whoami > $dir\who.txt"
+            "whoami /priv >> $dir\who.txt"
+            "curl.exe -sSL -o %TEMP%\sx.tar.gz https://github.com/searxng/searxng/archive/$rev.tar.gz"
+            'mkdir %TEMP%\sx'
+            "tar -xf %TEMP%\sx.tar.gz -C %TEMP%\sx > $dir\tar.txt 2>&1"
+            "echo tar exit %ERRORLEVEL%>> $dir\tar.txt"
+            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out1.txt 2> $dir\err1.txt"
+            "echo %ERRORLEVEL%> $dir\exit1.txt"
+            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out2.txt 2> $dir\err2.txt"
+            "echo %ERRORLEVEL%> $dir\exit2.txt"
+            "echo done> $dir\finished.txt"
+          ) | Set-Content -Encoding ascii "$dir\run.cmd"
+
+          $name = 'hodis-smoke'
+          $password = "Aa1!$([guid]::NewGuid())"
+          New-LocalUser -Name $name -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -Group 'Users' -Member $name
+          # Lets the account start a batch job without giving it any admin right.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $name
+          Get-LocalGroupMember -Group 'Administrators' | Out-String | Write-Host
+
+          $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $dir\run.cmd"
+          Register-ScheduledTask -TaskName $name -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
+          Start-ScheduledTask -TaskName $name
+          Start-Sleep 10
+          Get-ScheduledTaskInfo -TaskName $name | Format-List LastRunTime, LastTaskResult | Out-String | Write-Host
+
+          $deadline = (Get-Date).AddMinutes(15)
+          while (-not (Test-Path "$dir\finished.txt") -and (Get-Date) -lt $deadline) { Start-Sleep 5 }
+          Get-ScheduledTaskInfo -TaskName $name | Format-List LastRunTime, LastTaskResult | Out-String | Write-Host
+
+          foreach ($file in 'who', 'tar', 'exit1', 'err1', 'out1', 'exit2', 'err2') {
+            Write-Host "--- $file"
+            Get-Content "$dir\$file.txt" -Tail 40 -ErrorAction SilentlyContinue
+          }
+          Write-Host '--- engine log'
+          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 30 -ErrorAction SilentlyContinue
