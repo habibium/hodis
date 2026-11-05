@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-11-05
 
 - The first run in a terminal is now a setup wizard: it asks which provider to
   use, then only what that provider needs, tests it with one search, and saves
@@ -19,6 +19,10 @@
 - `embedded = "only"` under `[searxng]` always searches hodis's own instance, even
   when something else answers at `url`. `hodis setup` saves it when you choose
   that instance, so another SearXNG on `localhost:8888` cannot take its place.
+- Dependencies are updated past 13 security advisories, among them rustls and h2,
+  which carry all of hodis's HTTPS.
+- The library's API changed: `SearXNG::embedded` is now the `Embedded` enum,
+  `Engine::ensure_running` reports to a `Progress`, and `render_setup_step` is gone.
 
 ## 0.1.0 - 2026-11-01
 
