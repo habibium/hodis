@@ -2,6 +2,9 @@
 
 Web search from the terminal, for people and for AI agents.
 
+hodis (হদিস, pronounced /ɦod̪iʃ/) is the Bengali word for a trace or the
+whereabouts of something.
+
 ![hodis printing results for a search, piping their URLs to head, then browsing the same results in its full-screen view](docs/demo.gif)
 
 ```console
