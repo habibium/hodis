@@ -8,7 +8,7 @@ repository = "https://github.com/habibium/hodis"
 license = "MIT"
 keywords = ["cli", "search", "web"]
 categories = ["command-line-utilities"]
-exclude = [".github/", "scripts/", "bacon.toml"]
+exclude = [".github/", "docs/", "scripts/", "bacon.toml"]
 
 [dependencies]
 anstream = "1"

@@ -2,6 +2,8 @@
 
 Web search from the terminal, for people and for AI agents.
 
+![hodis printing results for a search, piping their URLs to head, then browsing the same results in its full-screen view](docs/demo.gif)
+
 ```console
 $ hodis capital of norway
 1. Oslo - Wikipedia [google]
