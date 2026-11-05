@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0 - 2026-11-05
+
+- The first run in a terminal is now a setup wizard: it asks which provider to
+  use, then only what that provider needs, tests it with one search, and saves
+  the choice. `hodis setup` runs it again.
+- Setting up SearXNG shows a progress bar over a running list of what is being
+  added and changed, in the style of apt and pacman, and keeps the full output
+  in `engine/setup.log`.
+- A SearXNG setup cut short can now be retried; before, it failed from then on
+  until the data directory was deleted by hand.
+- Setting up SearXNG no longer writes outside the data directory: uv used to add
+  a `python3.13` launcher to `~/.local/bin` and, on Windows, a registry entry.
+- Setting up SearXNG no longer needs `tar` on the machine.
+- SearXNG gets three minutes to start rather than one, is compiled ahead of its
+  first start, and reports the end of its log if it stops or does not answer.
+- `setup` is now a command, so searching for that word alone takes `hodis -- setup`.
+- `embedded = "only"` under `[searxng]` always searches hodis's own instance, even
+  when something else answers at `url`. `hodis setup` saves it when you choose
+  that instance, so another SearXNG on `localhost:8888` cannot take its place.
+- Dependencies are updated past 13 security advisories, among them rustls and h2,
+  which carry all of hodis's HTTPS.
+- The library's API changed: `SearXNG::embedded` is now the `Embedded` enum,
+  `Engine::ensure_running` reports to a `Progress`, and `render_setup_step` is gone.
+
 ## 0.1.0 - 2026-11-01
 
 The first release, for testers.

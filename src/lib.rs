@@ -4,7 +4,9 @@ pub mod engine;
 pub mod keys;
 pub mod mcp;
 pub mod output;
+pub mod progress;
 pub mod providers;
+pub mod setup;
 pub mod tui;
 
 use std::num::NonZeroU32;
@@ -48,6 +50,16 @@ impl Provider {
             Self::DuckDuckGo => "DuckDuckGo",
             Self::SearXNG => "SearXNG",
             Self::Serper => "Serper",
+        }
+    }
+
+    /// The name config files and `--provider` use.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::DuckDuckGo => "duckduckgo",
+            Self::SearXNG => "searxng",
+            Self::Serper => "serper",
         }
     }
 }

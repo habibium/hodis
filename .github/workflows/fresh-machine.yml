@@ -1,9 +1,9 @@
 # Proves the embedded-engine bootstrap, which a search naming SearXNG starts
 # when no instance answers, on machines hodis's end users actually have: no
-# curl, python, pip or uv on PATH. The build step uses the full
+# curl, python, pip, tar or uv on PATH. The build step uses the full
 # runner toolchain; the smoke step then strips PATH down to the OS's own
 # binaries, so the only external tools hodis can reach are the ones every
-# stock install ships (notably tar).
+# stock install ships.
 #
 # Manual trigger only: each run downloads a few hundred megabytes and boots a
 # real SearXNG, which is too heavy for per-push CI. Note that upstream search
@@ -37,6 +37,7 @@ jobs:
           find "$HODIS_DATA_DIR" -maxdepth 3 | head -30
           test -x "$HODIS_DATA_DIR/bin/uv"
           test -x "$HODIS_DATA_DIR/engine/venv/bin/python"
+          test ! -e "$HOME/.local/bin/python3.13"
 
       - name: Bootstrap and search on a bare PATH (windows)
         if: runner.os == 'Windows'
@@ -51,6 +52,7 @@ jobs:
           Get-ChildItem -Recurse -Depth 2 $env:HODIS_DATA_DIR | Select-Object -First 30
           if (-not (Test-Path "$env:HODIS_DATA_DIR\bin\uv.exe")) { throw "uv missing" }
           if (-not (Test-Path "$env:HODIS_DATA_DIR\engine\venv\Scripts\python.exe")) { throw "venv python missing" }
+          if (Test-Path "$env:USERPROFILE\.local\bin\python3.13.exe") { throw "python launcher left outside the data directory" }
 
       - name: Engine log on failure (unix)
         if: failure() && runner.os != 'Windows'
@@ -81,3 +83,88 @@ jobs:
           & .\target\release\hodis.exe --provider searxng "cargo build"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "reuse took $($sw.Elapsed.TotalSeconds)s"
+
+  # CI's own account is an administrator, which hides what a standard Windows
+  # account is refused, such as creating a symlink. A task scheduled to run as
+  # such an account gets a real profile and the default data directory.
+  windows-standard-user:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Bootstrap and search as a standard user
+        shell: pwsh
+        run: |
+          $dir = 'C:\Users\Public\hodis-smoke'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item target\release\hodis.exe $dir
+          icacls $dir /grant 'Everyone:(OI)(CI)M' | Out-Null
+          @(
+            '@echo off'
+            "whoami /priv > $dir\privileges.txt"
+            "$dir\hodis.exe --provider searxng ""rust programming language"" > $dir\out.txt 2> $dir\err.txt"
+            # The space matters: `echo 0> file` would redirect stream 0 instead.
+            "echo %ERRORLEVEL% > $dir\exit.txt"
+          ) | Set-Content -Encoding ascii "$dir\run.cmd"
+
+          # A space in the name, as many real accounts have.
+          $name = 'hodis smoke'
+          $password = "Aa1!$([guid]::NewGuid())"
+          New-LocalUser -Name $name -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -Group 'Users' -Member $name
+          # Lets the account start a batch job without giving it any admin right.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $name
+          $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $dir\run.cmd"
+          Register-ScheduledTask -TaskName 'hodis-smoke' -Action $action -User $name -Password $password -RunLevel Limited | Out-Null
+          Start-ScheduledTask -TaskName 'hodis-smoke'
+
+          $deadline = (Get-Date).AddMinutes(20)
+          while (-not (Test-Path "$dir\exit.txt") -and (Get-Date) -lt $deadline) { Start-Sleep 5 }
+
+          Get-Content "$dir\privileges.txt" -ErrorAction SilentlyContinue
+          Write-Host '--- stderr'
+          Get-Content "$dir\err.txt" -ErrorAction SilentlyContinue
+          Write-Host '--- stdout'
+          Get-Content "$dir\out.txt" -ErrorAction SilentlyContinue | Select-Object -First 20
+          Write-Host '--- engine log'
+          Get-Content "C:\Users\$name\AppData\Roaming\hodis\engine\searxng.log" -Tail 40 -ErrorAction SilentlyContinue
+          $code = (Get-Content "$dir\exit.txt" -ErrorAction SilentlyContinue | Out-String).Trim()
+          Write-Host "exit code: $code"
+          if ($code -ne '0') { exit 1 }
+
+  # Everything above runs with its output redirected. This one goes through the
+  # wizard in a real Windows console, as a person would.
+  windows-console:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Install SearXNG through the wizard
+        shell: pwsh
+        run: |
+          python -m pip install --quiet pywinpty
+          python .github/scripts/windows_wizard.py target\release\hodis.exe
+          $config = "$env:APPDATA\hodis\config.toml"
+          Get-Content $config
+          if (-not (Select-String -Quiet 'provider = "searxng"' $config)) { throw "the choice was not saved" }
+          if (-not (Select-String -Quiet 'embedded = "only"' $config)) { throw "the instance chosen was not saved" }
+          Get-Content "$env:APPDATA\hodis\engine\setup.log" -Tail 5
+
+      - name: Search again with what the wizard saved
+        shell: pwsh
+        run: |
+          $document = target\release\hodis.exe --format json rust programming language | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "the search failed" }
+          if ($document.providers -notcontains 'searxng') { throw "the saved provider was not used" }

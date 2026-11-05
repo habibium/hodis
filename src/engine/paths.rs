@@ -122,4 +122,10 @@ impl Paths {
     pub fn log(&self) -> PathBuf {
         self.engine().join("searxng.log")
     }
+
+    /// Everything printed while installing, to send with a bug report.
+    #[must_use]
+    pub fn setup_log(&self) -> PathBuf {
+        self.engine().join("setup.log")
+    }
 }

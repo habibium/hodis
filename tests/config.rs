@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use clap::ValueEnum;
 
-use hodis::config::Config;
+use hodis::config::{Config, Embedded, SearXNGChoice, save_choice};
 use hodis::output::{ColorWhen, OutputFormat};
 use hodis::{Provider, Providers};
 
@@ -29,7 +29,7 @@ fn an_empty_file_keeps_every_default() {
     assert_eq!(config.timeout, Duration::from_secs(10));
     assert_eq!(config.cache_ttl, Duration::from_hours(1));
     assert_eq!(config.searxng.url.as_str(), "http://localhost:8888/");
-    assert!(config.searxng.embedded);
+    assert_eq!(config.searxng.embedded, Embedded::Fallback);
     assert_eq!(config.serper.url.as_str(), "https://google.serper.dev/");
     assert_eq!(
         config.duckduckgo.url.as_str(),
@@ -69,7 +69,7 @@ fn every_setting_is_read() {
     assert_eq!(config.color, ColorWhen::Never);
     assert_eq!(config.timeout, Duration::from_secs(3));
     assert_eq!(config.searxng.url.as_str(), "https://search.example.org/");
-    assert!(config.searxng.embedded);
+    assert_eq!(config.searxng.embedded, Embedded::Fallback);
     assert_eq!(
         config.serper.url.as_str(),
         "https://serper-proxy.example.org/"
@@ -196,9 +196,31 @@ fn an_instance_url_gains_the_trailing_slash_endpoints_join_onto() {
 fn setting_an_instance_url_turns_the_embedded_fallback_off_unless_asked() {
     let url = "[searxng]\nurl = 'https://example.org/'\n";
 
-    assert!(!parse(url).searxng.embedded);
-    assert!(parse(&format!("{url}embedded = true")).searxng.embedded);
-    assert!(!parse("[searxng]\nembedded = false").searxng.embedded);
+    assert_eq!(parse(url).searxng.embedded, Embedded::Never);
+    assert_eq!(
+        parse(&format!("{url}embedded = true")).searxng.embedded,
+        Embedded::Fallback
+    );
+    assert_eq!(
+        parse("[searxng]\nembedded = false").searxng.embedded,
+        Embedded::Never
+    );
+}
+
+#[test]
+fn embedded_can_ask_for_hodis_s_own_alone() {
+    assert_eq!(
+        parse("[searxng]\nembedded = \"only\"").searxng.embedded,
+        Embedded::Only
+    );
+}
+
+#[test]
+fn any_other_word_for_embedded_is_refused_with_the_choices() {
+    let error = Config::parse("[searxng]\nembedded = \"sometimes\"").expect_err("not a choice");
+
+    let message = format!("{error:#}");
+    assert!(message.contains("true, false or \"only\""), "{message}");
 }
 
 #[test]
@@ -233,4 +255,200 @@ fn an_error_in_a_file_names_the_file() -> anyhow::Result<()> {
         "{error:#}"
     );
     Ok(())
+}
+
+fn saved(before: Option<&str>, provider: Provider, searxng: &SearXNGChoice) -> String {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let path = dir.path().join("hodis").join("config.toml");
+    if let Some(before) = before {
+        fs::create_dir_all(path.parent().expect("the path has a directory"))
+            .expect("the directory is created");
+        fs::write(&path, before).expect("the config is written");
+    }
+    save_choice(&path, provider, searxng).expect("the choice is saved");
+    fs::read_to_string(&path).expect("the config is readable")
+}
+
+fn own_instance() -> SearXNGChoice {
+    SearXNGChoice::Instance("http://sx.example/".parse().expect("a valid url"))
+}
+
+#[test]
+fn a_saved_choice_creates_the_file_and_its_directory() {
+    assert_eq!(
+        saved(None, Provider::DuckDuckGo, &SearXNGChoice::Unchanged),
+        "provider = \"duckduckgo\"\n"
+    );
+}
+
+#[test]
+fn a_saved_choice_keeps_the_rest_of_the_file() {
+    let before = "# my settings\nformat = \"json\" # for scripts\n\n[cache]\nttl = 60\n";
+    let after = saved(Some(before), Provider::Serper, &SearXNGChoice::Unchanged);
+
+    assert!(after.contains("# my settings"), "{after}");
+    assert!(after.contains("format = \"json\" # for scripts"), "{after}");
+    assert_eq!(
+        parse(&after).providers,
+        Providers::Listed(vec![Provider::Serper])
+    );
+    assert_eq!(parse(&after).cache_ttl, Duration::from_mins(1));
+}
+
+#[test]
+fn a_saved_choice_replaces_a_list_of_providers() {
+    let after = saved(
+        Some("provider = [\"searxng\", \"serper\"]\n"),
+        Provider::DuckDuckGo,
+        &SearXNGChoice::Unchanged,
+    );
+    assert_eq!(after, "provider = \"duckduckgo\"\n");
+}
+
+#[test]
+fn an_instance_is_saved_so_that_hodis_will_not_replace_it() {
+    let after = saved(None, Provider::SearXNG, &own_instance());
+
+    let config = parse(&after);
+    assert_eq!(config.searxng.url.as_str(), "http://sx.example/");
+    assert_eq!(config.searxng.embedded, Embedded::Never);
+}
+
+#[test]
+fn choosing_hodis_s_own_searxng_forgets_an_old_address() {
+    let after = saved(
+        Some("[searxng]\nurl = \"http://old.example/\"\nembedded = false\n"),
+        Provider::SearXNG,
+        &SearXNGChoice::Embedded,
+    );
+
+    assert!(!after.contains("old.example"), "{after}");
+    assert_eq!(parse(&after).searxng.embedded, Embedded::Only);
+}
+
+#[test]
+fn choosing_hodis_s_own_searxng_is_saved_on_a_first_run() {
+    let after = saved(None, Provider::SearXNG, &SearXNGChoice::Embedded);
+
+    assert_eq!(
+        parse(&after).providers,
+        Providers::Listed(vec![Provider::SearXNG])
+    );
+    assert_eq!(parse(&after).searxng.embedded, Embedded::Only);
+}
+
+#[test]
+fn a_new_address_replaces_the_old_one_and_its_setting() {
+    let after = saved(
+        Some("[searxng]\nurl = \"http://old.example/\"\nembedded = true\n"),
+        Provider::SearXNG,
+        &own_instance(),
+    );
+
+    let config = parse(&after);
+    assert_eq!(config.searxng.url.as_str(), "http://sx.example/");
+    assert_eq!(config.searxng.embedded, Embedded::Never);
+}
+
+#[test]
+fn an_address_replaces_the_choice_of_hodis_s_own() {
+    let after = saved(
+        Some("[searxng]\nembedded = \"only\"\n"),
+        Provider::SearXNG,
+        &own_instance(),
+    );
+
+    assert_eq!(parse(&after).searxng.embedded, Embedded::Never);
+}
+
+#[test]
+fn a_comment_above_searxng_outlives_either_choice_of_instance() {
+    let before = "# my search setup\n[searxng]\nurl = \"http://old.example/\"\n";
+
+    for choice in [SearXNGChoice::Embedded, own_instance()] {
+        let after = saved(Some(before), Provider::SearXNG, &choice);
+
+        assert!(after.contains("# my search setup"), "{after}");
+        assert!(!after.contains("old.example"), "{after}");
+    }
+}
+
+#[test]
+fn a_choice_of_instance_replaces_one_written_on_a_single_line() {
+    let after = saved(
+        Some("searxng = { url = \"http://old.example/\" }\n"),
+        Provider::SearXNG,
+        &SearXNGChoice::Embedded,
+    );
+
+    assert!(!after.contains("old.example"), "{after}");
+    assert_eq!(parse(&after).searxng.embedded, Embedded::Only);
+}
+
+#[test]
+fn a_saved_choice_of_another_provider_keeps_the_searxng_chosen_before() {
+    let after = saved(
+        Some("[searxng]\nembedded = \"only\"\n"),
+        Provider::DuckDuckGo,
+        &SearXNGChoice::Unchanged,
+    );
+
+    assert_eq!(parse(&after).searxng.embedded, Embedded::Only);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_saved_choice_goes_through_a_link_to_the_file_it_points_at() {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let target = dir.path().join("dotfiles.toml");
+    let link = dir.path().join("config.toml");
+    fs::write(&target, "# kept in a dotfiles folder\n").expect("the config is written");
+    std::os::unix::fs::symlink(&target, &link).expect("the link is made");
+
+    save_choice(&link, Provider::Serper, &SearXNGChoice::Unchanged).expect("the choice is saved");
+
+    assert!(link.is_symlink(), "the link was replaced");
+    let after = fs::read_to_string(&target).expect("the target is readable");
+    assert!(after.contains("# kept in a dotfiles folder"), "{after}");
+    assert!(after.contains("provider = \"serper\""), "{after}");
+    let leftovers = fs::read_dir(dir.path())
+        .expect("the directory is readable")
+        .count();
+    assert_eq!(leftovers, 2, "a temporary file was left behind");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_nothing_is_reported_rather_than_replaced() {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let link = dir.path().join("config.toml");
+    std::os::unix::fs::symlink(dir.path().join("missing.toml"), &link).expect("the link is made");
+
+    let error = save_choice(&link, Provider::Serper, &SearXNGChoice::Unchanged)
+        .expect_err("there is nothing to write to");
+
+    assert!(
+        format!("{error:#}").contains(&link.display().to_string()),
+        "{error:#}"
+    );
+    assert!(link.is_symlink(), "the link was replaced");
+}
+
+#[test]
+fn a_config_file_that_is_not_toml_is_left_alone() {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let path = dir.path().join("config.toml");
+    fs::write(&path, "not = = toml").expect("the config is written");
+
+    let error = save_choice(&path, Provider::Serper, &SearXNGChoice::Unchanged)
+        .expect_err("it cannot be edited");
+
+    assert!(
+        format!("{error:#}").contains("invalid config file"),
+        "{error:#}"
+    );
+    assert_eq!(
+        fs::read_to_string(&path).expect("the file is still there"),
+        "not = = toml"
+    );
 }

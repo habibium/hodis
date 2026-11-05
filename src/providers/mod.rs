@@ -12,9 +12,10 @@ use tokio::time::{Instant, timeout_at};
 use url::Url;
 
 use crate::cache::Cache;
-use crate::config::Config;
+use crate::config::{Config, Embedded};
 use crate::engine::{Engine, is_reachable};
 use crate::keys::{self, KeyedProvider};
+use crate::progress::Progress;
 use crate::{
     Diagnostics, Provider, ProviderIssue, Providers, SearchParams, SearchProvider, SearchResponse,
     SearchResult,
@@ -30,20 +31,20 @@ const FUSION_K: f64 = 60.0;
 /// `config.timeout` to answer; those that fail or run out of time are reported
 /// in the diagnostics, and only a search that every one fails is an error.
 /// A provider whose response `cache` holds is not searched again. Only a
-/// SearXNG named in `providers` falls back to the engine hodis runs itself,
-/// and the steps taken to set that up are reported to `progress`.
+/// SearXNG named in `providers` may use the engine hodis runs itself, and the
+/// steps taken to set that up are reported to `progress`.
 pub async fn search(
     providers: &Providers,
     params: &SearchParams,
     config: &Config,
     client: &Client,
     cache: Option<&Cache>,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<SearchResponse> {
     let (providers, embedded) = match providers {
         Providers::Listed(listed) => (distinct(listed), config.searxng.embedded),
         // A SearXNG picked this way has just answered, so it needs no fallback.
-        Providers::Auto => (vec![pick(config, client).await], false),
+        Providers::Auto => (vec![pick(config, client).await], Embedded::Never),
     };
     ensure!(!providers.is_empty(), "there is no provider to search");
 
@@ -106,14 +107,13 @@ pub async fn search(
 }
 
 /// Sets up the engine hodis runs itself when searching `providers` would need
-/// it, reporting the steps to `progress`. A search does this too, but setting
-/// up lets uv write to the terminal, which a full-screen interface must do
-/// before it takes the screen over.
+/// it, reporting the steps to `progress`. A search does this too, but a
+/// full-screen interface has nowhere to show them once it takes the screen.
 pub async fn prepare(
     providers: &Providers,
     config: &Config,
     client: &Client,
-    progress: &mut impl Write,
+    progress: &mut Progress<impl Write>,
 ) -> Result<()> {
     if let Providers::Listed(listed) = providers
         && listed.contains(&Provider::SearXNG)
@@ -142,8 +142,8 @@ async fn connect(
     provider: Provider,
     config: &Config,
     client: &Client,
-    embedded: bool,
-    progress: &mut impl Write,
+    embedded: Embedded,
+    progress: &mut Progress<impl Write>,
 ) -> Result<Box<dyn SearchProvider>> {
     Ok(match provider {
         Provider::SearXNG => Box::new(SearXNGProvider {
@@ -160,20 +160,24 @@ async fn connect(
     })
 }
 
-/// The configured instance is one the user may or may not be running; when
-/// nothing answers there, hodis falls back to the engine it runs itself if
-/// `embedded` allows it.
+/// The configured instance is one the user may or may not be running, so
+/// `embedded` says when the engine hodis runs itself takes its place.
 async fn searxng_url(
     client: &Client,
     config: &Config,
-    embedded: bool,
-    progress: &mut impl Write,
+    embedded: Embedded,
+    progress: &mut Progress<impl Write>,
 ) -> Result<Url> {
     let url = &config.searxng.url;
-    if !embedded || is_reachable(client, url).await {
-        Ok(url.clone())
-    } else {
+    let use_own = match embedded {
+        Embedded::Never => false,
+        Embedded::Fallback => !is_reachable(client, url).await,
+        Embedded::Only => true,
+    };
+    if use_own {
         Engine::resolve()?.ensure_running(client, progress).await
+    } else {
+        Ok(url.clone())
     }
 }
 

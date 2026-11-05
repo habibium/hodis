@@ -1,6 +1,7 @@
 use std::{
     io::{self, IsTerminal, Write},
     num::NonZeroU32,
+    path::Path,
 };
 
 use anstream::{AutoStream, ColorChoice};
@@ -15,7 +16,10 @@ use hodis::{
     keys::{ApiKey, Keychain, KeyedProvider},
     mcp,
     output::{ColorWhen, OutputFormat, render, render_diagnostics, render_warning},
-    providers, tui,
+    progress::Progress,
+    providers,
+    setup::{self, Outcome, TerminalPrompts, Wizard},
+    tui,
 };
 
 #[derive(Parser)]
@@ -43,7 +47,7 @@ struct Search {
     #[arg(short, long, value_name = "NUMBER")]
     page: Option<NonZeroU32>,
     /// Search providers, comma-separated; several are searched at once
-    /// (default: searxng)
+    /// (default: the one `hodis setup` saved)
     #[arg(long, value_enum, value_delimiter = ',', value_name = "PROVIDER")]
     provider: Vec<Provider>,
     /// Search afresh instead of reusing a cached result
@@ -59,6 +63,11 @@ struct Search {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Choose a search provider and set it up
+    ///
+    /// hodis asks this on its first run in a terminal. Run it again to change
+    /// provider, or to retry a setup that failed.
+    Setup,
     /// Store or delete the API keys of providers that need one
     #[command(subcommand)]
     Key(KeyCommand),
@@ -69,7 +78,7 @@ enum Command {
     /// config file chooses unless `--provider` names others.
     Mcp {
         /// Search providers, comma-separated; several are searched at once
-        /// (default: searxng)
+        /// (default: the one `hodis setup` saved)
         #[arg(long, value_enum, value_delimiter = ',', value_name = "PROVIDER")]
         provider: Vec<Provider>,
     },
@@ -113,7 +122,17 @@ async fn main() -> Result<()> {
         }
     }
 
+    let config = if is_first_run(&cli, path.as_deref()) {
+        set_up(config, &mut err).await?
+    } else {
+        config
+    };
+
     match cli.command {
+        Some(Command::Setup) => {
+            ensure!(can_prompt(), "`hodis setup` needs a terminal");
+            set_up(config, &mut err).await.map(|_| ())
+        }
         Some(Command::Key(command)) => manage_key(command, &mut err),
         Some(Command::Mcp { provider }) => {
             if io::stdin().is_terminal() {
@@ -137,6 +156,29 @@ async fn main() -> Result<()> {
     }
 }
 
+/// Whether to ask which provider to use before anything else: a person is
+/// there to answer, has not said, and has no config file saying so.
+fn is_first_run(cli: &Cli, config_file: Option<&Path>) -> bool {
+    cli.command.is_none() && cli.search.provider.is_empty() && config_file.is_none() && can_prompt()
+}
+
+/// Asks which provider to use and sets it up, giving the settings to go on
+/// with: the new ones, or `config` if the user skipped this.
+async fn set_up(config: Config, err: &mut impl Write) -> Result<Config> {
+    let path = config::path().context("there is no config directory for the current user")?;
+    let progress = Progress::new(&mut *err, true);
+    let outcome = Wizard::new(&config, &path, TerminalPrompts::new(), progress)?
+        .run()
+        .await?;
+    match outcome {
+        Outcome::Saved => Ok(Config::read(&path)?.map_or(config, |loaded| loaded.config)),
+        Outcome::Skipped => {
+            writeln!(err, "{}", setup::SKIPPED)?;
+            Ok(config)
+        }
+    }
+}
+
 async fn interactive(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
     ensure!(
         can_draw(),
@@ -148,7 +190,8 @@ async fn interactive(args: Search, config: Config, err: &mut impl Write) -> Resu
         query: args.query.join(" "),
         page: args.page,
     });
-    tui::run(config, providers, cache, first, err).await
+    let mut progress = Progress::new(err, io::stderr().is_terminal());
+    tui::run(config, providers, cache, first, &mut progress).await
 }
 
 async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()> {
@@ -163,8 +206,17 @@ async fn search(args: Search, config: Config, err: &mut impl Write) -> Result<()
         page: args.page,
     };
 
-    let response =
-        providers::search(&providers, &params, &config, &client, cache.as_ref(), err).await?;
+    let mut progress = Progress::new(&mut *err, io::stderr().is_terminal());
+    let response = providers::search(
+        &providers,
+        &params,
+        &config,
+        &client,
+        cache.as_ref(),
+        &mut progress,
+    )
+    .await?;
+    drop(progress);
 
     match render(&response, format, &mut out) {
         // A reader that stops early, such as `head`, closes the pipe: that ends
@@ -286,6 +338,12 @@ fn require_query(
     Ok(())
 }
 
+/// Whether questions can be asked: they appear on standard error, and a search
+/// sent elsewhere is likely a script's, which nobody is there to answer for.
+fn can_prompt() -> bool {
+    can_draw() && io::stderr().is_terminal()
+}
+
 /// Whether the interactive search can run: it reads keys from standard input,
 /// draws on standard output, and moves the cursor, which a dumb terminal
 /// cannot.
@@ -398,6 +456,13 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn setup_is_a_command_unless_it_is_part_of_a_query() {
+        assert!(matches!(parse(&["setup"]).command, Some(Command::Setup)));
+        assert!(parse(&["--", "setup"]).command.is_none());
+        assert!(parse(&["how", "to", "setup"]).command.is_none());
     }
 
     #[test]

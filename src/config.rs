@@ -14,6 +14,7 @@ use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
 use serde::de::value::SeqAccessDeserializer;
 use serde::de::{self, Deserializer, IntoDeserializer, SeqAccess, Visitor};
+use toml_edit::{DocumentMut, Item, Table, value};
 use url::Url;
 
 use crate::output::{ColorWhen, OutputFormat};
@@ -49,9 +50,52 @@ pub struct SearXNG {
     /// Ends in `/`: endpoints are joined onto it, and a join replaces whatever
     /// follows the last slash.
     pub url: Url,
-    /// Whether hodis may install and run its own instance when nothing answers
-    /// at `url`. On unless the config file sets `url`.
-    pub embedded: bool,
+    /// When to search the instance hodis installs and runs itself.
+    pub embedded: Embedded,
+}
+
+/// When hodis searches the SearXNG instance it installs and runs itself. With
+/// no provider chosen, hodis only ever looks at `url`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Embedded {
+    /// Never, so `url` is the only instance. The default once `url` is set.
+    Never,
+    /// When nothing answers at `url`. The default otherwise.
+    Fallback,
+    /// Always, even when something answers at `url`.
+    Only,
+}
+
+impl<'de> Deserialize<'de> for Embedded {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Setting;
+
+        impl Visitor<'_> for Setting {
+            type Value = Embedded;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("true, false or \"only\"")
+            }
+
+            fn visit_bool<E: de::Error>(self, on: bool) -> Result<Self::Value, E> {
+                Ok(if on {
+                    Embedded::Fallback
+                } else {
+                    Embedded::Never
+                })
+            }
+
+            fn visit_str<E: de::Error>(self, word: &str) -> Result<Self::Value, E> {
+                if word == "only" {
+                    Ok(Embedded::Only)
+                } else {
+                    Err(E::invalid_value(de::Unexpected::Str(word), &self))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Setting)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,7 +142,7 @@ struct Document {
 #[derive(Default, Deserialize)]
 struct SearXNGTable {
     url: Option<Url>,
-    embedded: Option<bool>,
+    embedded: Option<Embedded>,
 }
 
 #[derive(Default, Deserialize)]
@@ -114,6 +158,74 @@ struct DuckDuckGoTable {
 #[derive(Default, Deserialize)]
 struct CacheTable {
     ttl: Option<u64>,
+}
+
+/// What a saved choice of provider says about where SearXNG is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearXNGChoice {
+    /// Whatever the file says, as the provider chosen does not use it.
+    Unchanged,
+    /// The instance hodis runs itself, even if another answers at `url`.
+    Embedded,
+    /// An instance the user runs, which hodis must not replace with its own if
+    /// it stops answering.
+    Instance(Url),
+}
+
+/// Records a choice of provider in the config file at `path`, creating it if
+/// needed. Everything else in the file stays as it is, comments included.
+pub fn save_choice(path: &Path, provider: Provider, searxng: &SearXNGChoice) -> Result<()> {
+    let path = &link_target(path)?;
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            return Err(e).with_context(|| format!("cannot read config file {}", path.display()));
+        }
+    };
+    let mut document: DocumentMut = text
+        .parse()
+        .with_context(|| format!("invalid config file {}", path.display()))?;
+
+    document["provider"] = value(provider.id());
+    match searxng {
+        SearXNGChoice::Unchanged => {}
+        SearXNGChoice::Embedded => choose_searxng(&mut document, "embedded", "only"),
+        SearXNGChoice::Instance(url) => choose_searxng(&mut document, "url", url.as_str()),
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("cannot create {}", parent.display()))?;
+    }
+    // Renamed into place, so that a crash cannot leave half a config file.
+    let temporary = path.with_extension("toml.new");
+    fs::write(&temporary, document.to_string())
+        .with_context(|| format!("cannot write {}", temporary.display()))?;
+    fs::rename(&temporary, path).with_context(|| format!("cannot write {}", path.display()))
+}
+
+/// `path`, or the file it links to. Renaming over a link would replace it,
+/// cutting the config off from the dotfiles folder the link points into.
+fn link_target(path: &Path) -> Result<PathBuf> {
+    if path.is_symlink() {
+        fs::canonicalize(path).with_context(|| format!("cannot follow the link {}", path.display()))
+    } else {
+        Ok(path.to_owned())
+    }
+}
+
+/// Sets `key` in place of the `url` and `embedded` of the old choice, in the
+/// table as it stands so that comments around it stay.
+fn choose_searxng(document: &mut DocumentMut, key: &str, setting: &str) {
+    if !document.get("searxng").is_some_and(Item::is_table_like) {
+        document["searxng"] = Item::Table(Table::new());
+    }
+    if let Some(table) = document["searxng"].as_table_like_mut() {
+        table.remove("url");
+        table.remove("embedded");
+        table.insert(key, value(setting));
+    }
 }
 
 /// The config file hodis reads: the one `HODIS_CONFIG` names, else
@@ -208,7 +320,11 @@ impl Config {
                 .map_or(DEFAULT_TIMEOUT, |secs| Duration::from_secs(secs.get())),
             searxng: SearXNG {
                 url,
-                embedded: document.searxng.embedded.unwrap_or(!url_set),
+                embedded: document.searxng.embedded.unwrap_or(if url_set {
+                    Embedded::Never
+                } else {
+                    Embedded::Fallback
+                }),
             },
             serper: Serper { url: serper_url },
             duckduckgo: DuckDuckGo {
@@ -255,7 +371,7 @@ fn one_or_many<'de, D: Deserializer<'de>>(
 
 /// `localhost:8888` parses as a URL with `localhost` as its scheme, so the
 /// scheme is checked rather than trusted.
-fn base_url(key: &str, mut url: Url) -> Result<Url> {
+pub(crate) fn base_url(key: &str, mut url: Url) -> Result<Url> {
     ensure!(
         matches!(url.scheme(), "http" | "https"),
         "{key} must be an http or https URL, not {url}"
