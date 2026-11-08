@@ -177,16 +177,18 @@ reaches your clipboard over SSH too.
 
 ## Providers
 
-|                | DuckDuckGo | SearXNG                              | Serper                 |
-| -------------- | ---------- | ------------------------------------ | ---------------------- |
-| Results from   | DuckDuckGo | Many search engines, merged          | Google                 |
-| Setup          | None       | Your instance, or one hodis installs | An API key             |
-| Cost           | Free       | Free                                 | Credit on your account |
-| Direct answers | No         | Yes                                  | Yes                    |
+|                | DuckDuckGo                   | SearXNG                              | Serper                    |
+| -------------- | ---------------------------- | ------------------------------------ | ------------------------- |
+| Results from   | DuckDuckGo                   | Many search engines, merged          | Google                    |
+| Setup          | None                         | Your instance, or one hodis installs | An account and an API key |
+| Reliability    | Rate limited under heavy use | The most reliable                    | Consistent                |
+| Cost           | Free                         | Free                                 | Paid, after a free trial  |
+| Direct answers | No                           | Yes                                  | Yes                       |
 
-To choose one, run `hodis setup`, pass `--provider`, or set `provider` in the
-config file. With none chosen, hodis searches SearXNG when an instance answers
-at `http://localhost:8888/`, or at the address the config file gives, and
+`hodis setup` and `hodis --help` compare them in more detail. To choose one, run
+`hodis setup`, pass `--provider`, or set `provider` in the config file. With
+none chosen, hodis searches SearXNG when an instance answers at
+`http://localhost:8888/`, or at the address the config file gives, and
 DuckDuckGo otherwise.
 
 ### DuckDuckGo
@@ -195,14 +197,18 @@ DuckDuckGo otherwise.
 hodis --provider duckduckgo rust borrow checker
 ```
 
-DuckDuckGo offers no search API, so hodis reads the results page it serves to
-browsers without JavaScript, as SearXNG does. Heavy use can get you a
-[CAPTCHA](#troubleshooting) for a while.
+DuckDuckGo needs nothing installed and no account. It offers no search API,
+though, so hodis reads the results page it serves to browsers without
+JavaScript, as SearXNG does. Heavy use can get you a
+[CAPTCHA](#troubleshooting), and searches fail until it lifts, which makes it
+the least reliable provider.
 
 ### SearXNG
 
 [SearXNG](https://docs.searxng.org) is a free metasearch engine: it queries
-other search engines and merges their results.
+other search engines and merges their results. That makes it the most reliable
+provider, as one engine refusing a search leaves out only its results. It needs
+a server: an instance you run, or one hodis installs and runs for you.
 
 #### An instance you run
 
@@ -237,9 +243,9 @@ provider chosen:
 
 ### Serper
 
-[Serper](https://serper.dev) serves Google results through an API, with a key
-from your account there. hodis keeps the key in the system keychain and never
-writes it to a file:
+[Serper](https://serper.dev) serves Google results through a paid API, with a
+free trial. It needs an API key from your account there, which hodis keeps in
+the system keychain and never writes to a file:
 
 ```sh
 hodis key set serper                     # prompts for the key, or reads stdin

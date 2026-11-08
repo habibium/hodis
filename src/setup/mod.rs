@@ -129,6 +129,7 @@ impl<'a, P: Prompts, W: Write> Wizard<'a, P, W> {
     pub async fn run(mut self) -> Result<Outcome> {
         self.progress
             .line("Let's choose where hodis sends your searches.\n");
+        self.progress.line(&format!("{}\n", trade_offs()));
         loop {
             let question = "Which search provider do you want to use?";
             let Some(choice) = self.prompts.choose(question, &provider_choices())? else {
@@ -176,8 +177,8 @@ impl<'a, P: Prompts, W: Write> Wizard<'a, P, W> {
 
     async fn duckduckgo(&mut self) -> Result<Next> {
         self.progress.line(
-            "\nDuckDuckGo needs nothing installed. It has no search API, so hodis reads its\n\
-             results page, and heavy use can get you a CAPTCHA for a while.",
+            "\nDuckDuckGo needs nothing installed. If heavy use gets you a CAPTCHA, searches\n\
+             fail for a while: wait, or run `hodis setup` to switch to SearXNG.",
         );
         self.progress.heading("Setting up DuckDuckGo");
         self.progress.plan(&[3, 1]);
@@ -289,7 +290,8 @@ impl<'a, P: Prompts, W: Write> Wizard<'a, P, W> {
         self.progress.line(&format!(
             "\nNeed to get {DOWNLOAD_SIZE}. After this, {INSTALLED_SIZE} of disk space will be used.\n\
              It all goes in {root}\n\
-             Nothing goes anywhere else, so deleting that folder removes it all.\n"
+             Nothing goes anywhere else, so deleting that folder removes it all.\n\
+             SearXNG then runs in the background, reachable from this computer only.\n"
         ));
     }
 
@@ -328,8 +330,8 @@ impl<'a, P: Prompts, W: Write> Wizard<'a, P, W> {
     async fn serper(&mut self) -> Result<Next> {
         let provider = KeyedProvider::Serper;
         self.progress.line(&format!(
-            "\nSerper serves Google results through an API key, kept in your system keychain.\n\
-             Get a key at {SERPER_SIGN_UP}\n"
+            "\nSerper is a paid API with a free trial. Sign up at {SERPER_SIGN_UP} for an\n\
+             API key, which hodis keeps in your system keychain.\n"
         ));
 
         let Some(key) = self.serper_key(provider)? else {
@@ -426,11 +428,32 @@ struct SerperKey {
 const PROVIDERS: [Provider; 3] = [Provider::DuckDuckGo, Provider::SearXNG, Provider::Serper];
 
 fn provider_choices() -> [Choice; 3] {
-    [
-        Choice::new("DuckDuckGo", "Works right away, nothing to install"),
-        Choice::new("SearXNG", "Many engines at once, run from your computer"),
-        Choice::new("Serper", "Google results, needs an API key"),
-    ]
+    PROVIDERS.map(|provider| Choice::new(provider.name(), provider.summary()))
+}
+
+/// What each provider gives (+) and costs (-), for `--help` and the wizard.
+/// Indented for a section of `--help`, and wrapped for an 80-column terminal.
+#[must_use]
+pub fn trade_offs() -> String {
+    format!(
+        "  DuckDuckGo
+    + Works right away: nothing to install, no account, free.
+    - Not very reliable: it has no search API, so hodis reads its results
+      page, and heavy use gets rate limited with a CAPTCHA that fails
+      searches for a while. Results from one engine, and no direct answers.
+
+  SearXNG
+    + The most reliable: it asks many search engines at once, so one engine
+      refusing leaves out only its results. Free, private, no account.
+    - Needs a SearXNG server. hodis can install one on this computer and
+      keep it running in the background: {DOWNLOAD_SIZE} to download,
+      {INSTALLED_SIZE} on disk. Or it can use a SearXNG you already run.
+
+  Serper
+    + Google results through an API: consistent and fast.
+    - Needs a serper.dev account and an API key. It is a paid API with a free
+      trial, and your searches go through serper.dev on your account."
+    )
 }
 
 /// An address as typed: `localhost:8888` means `http://localhost:8888/`.
@@ -486,7 +509,12 @@ mod tests {
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::{Choice, KeychainSource, Outcome, Prompts, Wizard, parse_address};
+    use unicode_width::UnicodeWidthStr;
+
+    use super::{
+        Choice, KeychainSource, Outcome, PROVIDERS, Prompts, Wizard, parse_address,
+        provider_choices, trade_offs,
+    };
     use crate::config::Config;
     use crate::engine::{self, Engine, Paths};
     use crate::keys::{ApiKey, Keychain, KeyedProvider};
@@ -701,6 +729,34 @@ mod tests {
 
         assert_eq!(done.outcome, Outcome::Skipped);
         assert_eq!(setup.saved(), None);
+    }
+
+    #[tokio::test]
+    async fn the_providers_are_compared_before_the_first_question() {
+        let setup = Setup::new("");
+
+        let done = setup.run(&[Answer::Back]).await;
+
+        assert!(done.output.contains(&trade_offs()), "{}", done.output);
+    }
+
+    #[test]
+    fn the_comparison_covers_every_provider_in_80_columns() {
+        let compared = trade_offs();
+        for provider in PROVIDERS {
+            let heading = format!("  {}\n", provider.name());
+            assert!(compared.contains(&heading), "{provider:?}: {compared}");
+        }
+        for line in compared.lines() {
+            assert!(line.width() < 80, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn every_provider_is_offered_with_its_trade_off() {
+        for choice in provider_choices() {
+            assert!(!choice.hint.is_empty(), "{choice:?}");
+        }
     }
 
     #[tokio::test]

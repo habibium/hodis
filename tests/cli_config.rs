@@ -24,14 +24,16 @@ fn help_names_the_config_file() -> anyhow::Result<()> {
     let dir = tempfile::tempdir()?;
     let config = dir.path().join("config.toml");
 
-    let output = hodis(&config, &dir, &["--help"]);
+    for flag in ["--help", "-h"] {
+        let output = hodis(&config, &dir, &[flag]);
 
-    assert!(output.status.success());
-    let help = String::from_utf8(output.stdout)?;
-    assert!(
-        help.contains(&format!("Config file: {}", config.display())),
-        "{help}"
-    );
+        assert!(output.status.success());
+        let help = String::from_utf8(output.stdout)?;
+        assert!(
+            help.contains(&format!("Config file: {}", config.display())),
+            "{flag}: {help}"
+        );
+    }
     Ok(())
 }
 
