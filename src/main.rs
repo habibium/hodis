@@ -66,7 +66,8 @@ enum Command {
     /// Choose a search provider and set it up
     ///
     /// hodis asks this on its first run in a terminal. Run it again to change
-    /// provider, or to retry a setup that failed.
+    /// provider, or to retry a setup that failed. Before you choose, it shows
+    /// what each provider gives and costs, as listed below.
     Setup,
     /// Store or delete the API keys of providers that need one
     #[command(subcommand)]
@@ -309,17 +310,37 @@ fn read_key(provider: KeyedProvider) -> Result<ApiKey> {
     ApiKey::new(&text)
 }
 
-/// `Cli::parse`, with `--help` naming the config file.
+/// `Cli::parse`, with the help comparing the providers and naming the config
+/// file.
 fn parse_args() -> Cli {
-    let mut command = Cli::command();
-    if let Some(path) = config::path() {
-        command = command.after_help(format!("Config file: {}", path.display()));
-    }
+    let mut command = command();
     let cli = Cli::from_arg_matches(&command.get_matches_mut()).unwrap_or_else(|e| e.exit());
     if let Err(e) = require_query(&cli, &mut command, can_draw()) {
         e.exit();
     }
     cli
+}
+
+/// The command line, with `-h` pointing at the providers that `--help` and
+/// `hodis setup --help` compare.
+fn command() -> clap::Command {
+    let command = Cli::command();
+    let header = *command.get_styles().get_header();
+    let providers = format!("{header}Providers:{header:#}\n{}", setup::trade_offs());
+    let config_file = config::path().map(|path| format!("\n\nConfig file: {}", path.display()));
+    let config_file = config_file.as_deref().unwrap_or_default();
+
+    command
+        .after_help(format!(
+            "Run `hodis --help` to compare the providers.{config_file}"
+        ))
+        // Clap shows this instead of `after_help` on `--help`, not after it.
+        .after_long_help(format!(
+            "{providers}\n\n  \
+             Name several to search them all at once, as in --provider searxng,serper.\n  \
+             Run `hodis setup` to choose one and set it up.{config_file}"
+        ))
+        .mut_subcommand("setup", |setup| setup.after_long_help(providers))
 }
 
 /// A search without a query is interactive, which only a terminal can show.
@@ -357,9 +378,9 @@ fn can_draw() -> bool {
 mod tests {
     use clap::{CommandFactory, Parser};
 
-    use hodis::Provider;
+    use hodis::{Provider, setup};
 
-    use super::{Cli, Command, KeyCommand, KeyedProvider, require_query};
+    use super::{Cli, Command, KeyCommand, KeyedProvider, command, require_query};
 
     fn parse(args: &[&str]) -> Cli {
         Cli::try_parse_from([&["hodis"], args].concat()).expect("the arguments parse")
@@ -368,6 +389,39 @@ mod tests {
     #[test]
     fn the_cli_definition_is_valid() {
         Cli::command().debug_assert();
+        command().debug_assert();
+    }
+
+    #[test]
+    fn the_long_help_compares_the_providers() {
+        let help = command().render_long_help().to_string();
+        assert!(help.contains(&setup::trade_offs()), "{help}");
+        assert!(help.contains("--provider searxng,serper"), "{help}");
+        for provider in [Provider::DuckDuckGo, Provider::SearXNG, Provider::Serper] {
+            let value = format!("{}:", provider.id());
+            let line = help
+                .lines()
+                .find(|line| line.trim_start().starts_with(&format!("- {value}")))
+                .unwrap_or_else(|| panic!("no possible value {value}: {help}"));
+            assert!(line.ends_with(&provider.summary()), "{line}");
+        }
+    }
+
+    #[test]
+    fn the_short_help_points_at_the_comparison() {
+        let help = command().render_help().to_string();
+        assert!(!help.contains(&setup::trade_offs()), "{help}");
+        assert!(help.contains("`hodis --help`"), "{help}");
+    }
+
+    #[test]
+    fn setup_help_compares_the_providers() {
+        let mut command = command();
+        let setup_command = command
+            .find_subcommand_mut("setup")
+            .expect("a setup command");
+        let help = setup_command.render_long_help().to_string();
+        assert!(help.contains(&setup::trade_offs()), "{help}");
     }
 
     #[test]

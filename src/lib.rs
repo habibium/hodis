@@ -23,12 +23,19 @@ use url::Url;
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
     /// DuckDuckGo's web results, read from its results page
-    #[value(name = "duckduckgo")]
+    #[value(
+        name = "duckduckgo",
+        help = "Works right away, but heavy use gets rate limited"
+    )]
     DuckDuckGo,
     /// A SearXNG instance: yours, or one hodis runs itself
-    #[value(name = "searxng")]
+    #[value(
+        name = "searxng",
+        help = "The most reliable, but needs a server hodis can install"
+    )]
     SearXNG,
     /// Google results through serper.dev, with an API key
+    #[value(help = "Google results, but needs a paid serper.dev API key")]
     Serper,
 }
 
@@ -61,6 +68,14 @@ impl Provider {
             Self::SearXNG => "searxng",
             Self::Serper => "serper",
         }
+    }
+
+    /// Its trade-off in a few words, as `--help` lists it.
+    #[must_use]
+    pub fn summary(self) -> String {
+        self.to_possible_value()
+            .and_then(|value| value.get_help().map(ToString::to_string))
+            .unwrap_or_default()
     }
 }
 
